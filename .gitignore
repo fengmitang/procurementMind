@@ -1,0 +1,24 @@
+# Local secrets
+.env
+.env.docker
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Coverage and build output
+.coverage
+htmlcov/
+dist/
+build/
+.codex-qa/
+.artifacts/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

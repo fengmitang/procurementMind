@@ -1,0 +1,78 @@
+name: procurement-agent
+
+services:
+  mysql:
+    image: mysql:8.0.44
+    container_name: procurement-agent-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-procurement_agent}
+      MYSQL_USER: ${MYSQL_USER:-procurement_agent_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - procurement-agent-mysql-data:/var/lib/mysql
+    networks:
+      - procurement-agent-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    labels:
+      com.procurement-agent.resource: "mysql"
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: procurement-agent-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      TZ: Asia/Shanghai
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD:?REDIS_PASSWORD is required}",
+      ]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - procurement-agent-redis-data:/data
+    networks:
+      - procurement-agent-network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    labels:
+      com.procurement-agent.resource: "redis"
+
+networks:
+  procurement-agent-network:
+    name: procurement-agent-network
+    driver: bridge
+    labels:
+      com.procurement-agent.resource: "network"
+
+volumes:
+  procurement-agent-mysql-data:
+    name: procurement-agent-mysql-data
+    labels:
+      com.procurement-agent.resource: "mysql-data"
+  procurement-agent-redis-data:
+    name: procurement-agent-redis-data
+    labels:
+      com.procurement-agent.resource: "redis-data"

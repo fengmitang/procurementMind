@@ -2,6 +2,9 @@
 
 数据中心采购流程自动化 Agent 的 FastAPI 后端。
 
+第一次搭建环境请阅读
+[本地开发环境搭建与启动指南](docs/本地开发环境搭建与启动指南.md)。
+
 ## 开发环境
 
 - Python：`F:\Anaconda\envs\purchasing-agent\python.exe`

@@ -358,6 +358,8 @@ def request_rows() -> list[dict]:
             "version": max(request_id - 91001, 0),
             "submitted_at": submitted_at,
             "completed_at": completed_at,
+            "created_at": datetime(2026, 8, 5, 12, 0, 0),
+            "updated_at": datetime(2026, 8, 5, 12, 0, 0),
         }
         for (
             request_id,
@@ -400,9 +402,19 @@ def review_rows() -> list[dict]:
                 "reviewer_mobile_snapshot": "13800009002",
                 "review_result": decision,
                 "review_opinion": opinion,
-                "proposed_supplier_id": 92001 if completed and decision == "APPROVED" else None,
+                "proposed_supplier_id": (
+                    92003
+                    if request_id == 91005
+                    else 92001
+                    if completed and decision == "APPROVED"
+                    else None
+                ),
                 "proposed_supplier_name": (
-                    "TEST-常规供应商A" if completed and decision == "APPROVED" else None
+                    "TEST-永久黑名单供应商"
+                    if request_id == 91005
+                    else "TEST-常规供应商A"
+                    if completed and decision == "APPROVED"
+                    else None
                 ),
                 "supplier_contact_name": "测试联系人A" if completed else None,
                 "supplier_contact_info": "13900009201" if completed else None,
@@ -453,8 +465,9 @@ def execution_rows() -> list[dict]:
             "supplier_bank_account_snapshot": bank_account,
             "supplier_address_snapshot": "TEST-采购时地址快照",
             "contract_contact_info_snapshot": "TEST-采购时联系人快照",
-            "actual_unit_price": Decimal("950.00"),
-            "actual_total_price": Decimal("950.00") * quantity,
+            "actual_unit_price": (Decimal("1600.00") if request_id == 91009 else Decimal("950.00")),
+            "actual_total_price": (Decimal("1600.00") if request_id == 91009 else Decimal("950.00"))
+            * quantity,
             "tax_rate": Decimal("13.00"),
             "purchased_at": datetime(2026, 7, 6, 14, 0, 0),
             "execution_remark": "TEST 采购执行",

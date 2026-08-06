@@ -3,8 +3,10 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.api.routes import demo as demo_route
 from app.db.session import engine
 from app.main import app
+from app.schemas.demo import DemoAgentChatRequest
 from scripts.seed_demo_data import seed_demo_data
 
 
@@ -48,6 +50,13 @@ async def test_demo_page_and_assets_are_available() -> None:
     assert "保存审核资料" in script.text
     assert "保存采购信息" in script.text
     assert "保存入库信息" in script.text
+    assert 'data-tab="assistant"' in page.text
+    assert 'id="assistant-form"' in page.text
+    assert 'id="assistant-result"' in page.text
+    assert '"/demo-api/agent-chat"' in script.text
+    assert "执行详情" in script.text
+    assert "Trace 时间线" in script.text
+    assert "本次未调用模型" in script.text
     assert 'state.role.kind !== "applicant"' in script.text
     for device_type in (
         "电气",
@@ -109,6 +118,91 @@ async def test_demo_proxy_rejects_unknown_users_and_unsafe_paths() -> None:
     assert unsafe_path.json()["code"] == "DEMO_PATH_NOT_ALLOWED"
 
 
+@pytest.mark.asyncio
+async def test_demo_agent_chat_forwards_only_allowlisted_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_forward(
+        payload: DemoAgentChatRequest,
+        trace_id: str,
+    ) -> tuple[int, dict]:
+        captured["payload"] = payload
+        captured["trace_id"] = trace_id
+        return 200, {
+            "success": True,
+            "code": "OK",
+            "message": "请求成功",
+            "data": {
+                "conversation_id": "conversation-demo",
+                "message_id": "message-demo",
+                "task_id": "task-demo",
+                "task_type": "ANALYSIS",
+                "status": "ACCEPTED",
+                "summary": "查询完成",
+                "result": {"result_kind": "ANALYSIS", "completion_status": "COMPLETE"},
+            },
+            "trace_id": "trace-agent",
+        }
+
+    monkeypatch.setattr(demo_route, "forward_agent_chat", fake_forward)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/demo-api/agent-chat",
+            json={
+                "platform_user_id": "test-user-02",
+                "message": "统计本月服务器采购金额",
+                "external_conversation_id": "browser-conversation",
+                "external_message_id": "browser-message",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["task_type"] == "ANALYSIS"
+    forwarded = captured["payload"]
+    assert isinstance(forwarded, DemoAgentChatRequest)
+    assert forwarded.platform_user_id == "test-user-02"
+    assert forwarded.message == "统计本月服务器采购金额"
+    assert isinstance(captured["trace_id"], str)
+    assert captured["trace_id"]
+
+
+@pytest.mark.asyncio
+async def test_demo_agent_chat_rejects_unknown_user_before_forwarding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    async def fake_forward(
+        payload: DemoAgentChatRequest,
+        trace_id: str,
+    ) -> tuple[int, dict]:
+        nonlocal called
+        called = True
+        return 200, {}
+
+    monkeypatch.setattr(demo_route, "forward_agent_chat", fake_forward)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/demo-api/agent-chat",
+            json={
+                "platform_user_id": "external-user",
+                "message": "查询采购数据",
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "DEMO_USER_NOT_ALLOWED"
+    assert called is False
+
+
 def test_frontend_does_not_contain_gateway_credentials() -> None:
     frontend = Path(__file__).resolve().parents[1] / "frontend"
     combined_source = "\n".join(
@@ -117,3 +211,4 @@ def test_frontend_does_not_contain_gateway_credentials() -> None:
 
     assert "IDENTITY_GATEWAY_SECRET" not in combined_source
     assert "X-Gateway-Signature" not in combined_source
+    assert "MODEL_API_KEY" not in combined_source

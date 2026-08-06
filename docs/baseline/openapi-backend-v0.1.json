@@ -1,0 +1,6110 @@
+{
+  "components": {
+    "schemas": {
+      "ActionRequest": {
+        "properties": {
+          "action_token": {
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Action Token",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version",
+          "action_token"
+        ],
+        "title": "ActionRequest",
+        "type": "object"
+      },
+      "ActiveConversationData": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "integer"
+          },
+          "purchase_request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Request Id"
+          },
+          "redis_state_exists": {
+            "title": "Redis State Exists",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "status",
+          "purchase_request_id",
+          "redis_state_exists"
+        ],
+        "title": "ActiveConversationData",
+        "type": "object"
+      },
+      "ActiveConversationRequest": {
+        "properties": {
+          "current_action": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Current Action",
+            "type": "string"
+          },
+          "external_conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Conversation Id"
+          }
+        },
+        "required": [
+          "current_action"
+        ],
+        "title": "ActiveConversationRequest",
+        "type": "object"
+      },
+      "ApiResponse_ActiveConversationData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ActiveConversationData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[ActiveConversationData]",
+        "type": "object"
+      },
+      "ApiResponse_BlacklistCreatedData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/BlacklistCreatedData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[BlacklistCreatedData]",
+        "type": "object"
+      },
+      "ApiResponse_BlacklistReleasedData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/BlacklistReleasedData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[BlacklistReleasedData]",
+        "type": "object"
+      },
+      "ApiResponse_ConversationCompletedData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConversationCompletedData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[ConversationCompletedData]",
+        "type": "object"
+      },
+      "ApiResponse_ConversationStateData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConversationStateData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[ConversationStateData]",
+        "type": "object"
+      },
+      "ApiResponse_CurrentUserData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CurrentUserData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[CurrentUserData]",
+        "type": "object"
+      },
+      "ApiResponse_DispatchNotificationsData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DispatchNotificationsData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[DispatchNotificationsData]",
+        "type": "object"
+      },
+      "ApiResponse_FieldsSaveData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/FieldsSaveData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[FieldsSaveData]",
+        "type": "object"
+      },
+      "ApiResponse_HandlerCandidateListData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/HandlerCandidateListData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[HandlerCandidateListData]",
+        "type": "object"
+      },
+      "ApiResponse_HealthData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/HealthData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[HealthData]",
+        "type": "object"
+      },
+      "ApiResponse_MessageCreatedData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/MessageCreatedData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[MessageCreatedData]",
+        "type": "object"
+      },
+      "ApiResponse_MessageListData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/MessageListData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[MessageListData]",
+        "type": "object"
+      },
+      "ApiResponse_NotificationListData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/NotificationListData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[NotificationListData]",
+        "type": "object"
+      },
+      "ApiResponse_ProductRecommendationData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProductRecommendationData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[ProductRecommendationData]",
+        "type": "object"
+      },
+      "ApiResponse_PurchaseHistoryRecommendationData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PurchaseHistoryRecommendationData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[PurchaseHistoryRecommendationData]",
+        "type": "object"
+      },
+      "ApiResponse_PurchaseRecordListData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PurchaseRecordListData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[PurchaseRecordListData]",
+        "type": "object"
+      },
+      "ApiResponse_ReadinessData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ReadinessData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[ReadinessData]",
+        "type": "object"
+      },
+      "ApiResponse_RequirementDetailData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RequirementDetailData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[RequirementDetailData]",
+        "type": "object"
+      },
+      "ApiResponse_RequirementListData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RequirementListData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[RequirementListData]",
+        "type": "object"
+      },
+      "ApiResponse_RequirementMutationData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RequirementMutationData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[RequirementMutationData]",
+        "type": "object"
+      },
+      "ApiResponse_ResendNotificationData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResendNotificationData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[ResendNotificationData]",
+        "type": "object"
+      },
+      "ApiResponse_SnapshotSavedData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SnapshotSavedData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[SnapshotSavedData]",
+        "type": "object"
+      },
+      "ApiResponse_StateSavedData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/StateSavedData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[StateSavedData]",
+        "type": "object"
+      },
+      "ApiResponse_SupplierCreatedData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SupplierCreatedData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[SupplierCreatedData]",
+        "type": "object"
+      },
+      "ApiResponse_SupplierDetailData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SupplierDetailData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[SupplierDetailData]",
+        "type": "object"
+      },
+      "ApiResponse_SupplierRecommendationData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SupplierRecommendationData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[SupplierRecommendationData]",
+        "type": "object"
+      },
+      "ApiResponse_SupplierSearchData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SupplierSearchData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[SupplierSearchData]",
+        "type": "object"
+      },
+      "ApiResponse_TimelineContactData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TimelineContactData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[TimelineContactData]",
+        "type": "object"
+      },
+      "ApiResponse_TimelineData_": {
+        "properties": {
+          "code": {
+            "default": "OK",
+            "title": "Code",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TimelineData"
+          },
+          "message": {
+            "default": "操作成功",
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[TimelineData]",
+        "type": "object"
+      },
+      "ApplicantFields": {
+        "properties": {
+          "applicant_remark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applicant Remark"
+          },
+          "application_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Reason"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Name"
+          },
+          "device_profession": {
+            "anyOf": [
+              {
+                "enum": [
+                  "电气",
+                  "暖通",
+                  "弱电",
+                  "机房环境",
+                  "工器具",
+                  "算力服务器",
+                  "IDC网络",
+                  "其他"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Profession"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,15}|(?=[\\d.]{1,19}0*$)\\d{0,15}\\.\\d{0,3}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "title": "ApplicantFields",
+        "type": "object"
+      },
+      "AssignedActionRequest": {
+        "properties": {
+          "action_token": {
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Action Token",
+            "type": "string"
+          },
+          "assigned_to_employee_id": {
+            "title": "Assigned To Employee Id",
+            "type": "integer"
+          },
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version",
+          "assigned_to_employee_id",
+          "action_token"
+        ],
+        "title": "AssignedActionRequest",
+        "type": "object"
+      },
+      "BlacklistCreatedData": {
+        "properties": {
+          "blacklist_id": {
+            "title": "Blacklist Id",
+            "type": "integer"
+          },
+          "end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "supplier_id": {
+            "title": "Supplier Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "blacklist_id",
+          "supplier_id",
+          "status",
+          "end_at"
+        ],
+        "title": "BlacklistCreatedData",
+        "type": "object"
+      },
+      "BlacklistReleasedData": {
+        "properties": {
+          "blacklist_id": {
+            "title": "Blacklist Id",
+            "type": "integer"
+          },
+          "released_at": {
+            "format": "date-time",
+            "title": "Released At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "blacklist_id",
+          "status",
+          "released_at"
+        ],
+        "title": "BlacklistReleasedData",
+        "type": "object"
+      },
+      "CompleteConversationRequest": {
+        "properties": {
+          "purchase_request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Request Id"
+          }
+        },
+        "title": "CompleteConversationRequest",
+        "type": "object"
+      },
+      "ConversationCompletedData": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "integer"
+          },
+          "redis_state_deleted": {
+            "title": "Redis State Deleted",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "status",
+          "redis_state_deleted"
+        ],
+        "title": "ConversationCompletedData",
+        "type": "object"
+      },
+      "ConversationStateData": {
+        "properties": {
+          "awaiting_confirmation": {
+            "default": false,
+            "title": "Awaiting Confirmation",
+            "type": "boolean"
+          },
+          "collected_data": {
+            "additionalProperties": true,
+            "title": "Collected Data",
+            "type": "object"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "integer"
+          },
+          "current_action": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Current Action",
+            "type": "string"
+          },
+          "last_recommendations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Last Recommendations",
+            "type": "array"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "pending_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Field"
+          },
+          "purchase_request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Request Id"
+          },
+          "recent_messages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Recent Messages",
+            "type": "array"
+          },
+          "restored_from_snapshot": {
+            "default": false,
+            "title": "Restored From Snapshot",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "current_action",
+          "conversation_id"
+        ],
+        "title": "ConversationStateData",
+        "type": "object"
+      },
+      "ConversationStatePayload": {
+        "properties": {
+          "awaiting_confirmation": {
+            "default": false,
+            "title": "Awaiting Confirmation",
+            "type": "boolean"
+          },
+          "collected_data": {
+            "additionalProperties": true,
+            "title": "Collected Data",
+            "type": "object"
+          },
+          "current_action": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Current Action",
+            "type": "string"
+          },
+          "last_recommendations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Last Recommendations",
+            "type": "array"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "pending_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Field"
+          },
+          "purchase_request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Request Id"
+          },
+          "recent_messages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Recent Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "current_action"
+        ],
+        "title": "ConversationStatePayload",
+        "type": "object"
+      },
+      "CreateBlacklistRequest": {
+        "properties": {
+          "action_token": {
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Action Token",
+            "type": "string"
+          },
+          "blacklist_type": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Blacklist Type",
+            "type": "string"
+          },
+          "duration_type": {
+            "title": "Duration Type",
+            "type": "string"
+          },
+          "end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "integer"
+          },
+          "start_at": {
+            "format": "date-time",
+            "title": "Start At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "blacklist_type",
+          "reason",
+          "duration_type",
+          "start_at",
+          "action_token"
+        ],
+        "title": "CreateBlacklistRequest",
+        "type": "object"
+      },
+      "CreateMessageRequest": {
+        "properties": {
+          "content": {
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "external_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Message Id"
+          },
+          "sender_type": {
+            "title": "Sender Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sender_type",
+          "content"
+        ],
+        "title": "CreateMessageRequest",
+        "type": "object"
+      },
+      "CreateRequirementRequest": {
+        "properties": {
+          "building_id": {
+            "title": "Building Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "building_id"
+        ],
+        "title": "CreateRequirementRequest",
+        "type": "object"
+      },
+      "CurrentHandlerData": {
+        "properties": {
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "platform_identities": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Platform Identities",
+            "type": "array"
+          }
+        },
+        "required": [
+          "employee_id",
+          "name"
+        ],
+        "title": "CurrentHandlerData",
+        "type": "object"
+      },
+      "CurrentUserData": {
+        "properties": {
+          "buildings": {
+            "items": {
+              "$ref": "#/components/schemas/UserBuildingData"
+            },
+            "title": "Buildings",
+            "type": "array"
+          },
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "integer"
+          },
+          "employee_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee No"
+          },
+          "mobile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mobile"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "platform_type": {
+            "title": "Platform Type",
+            "type": "string"
+          },
+          "platform_user_id": {
+            "title": "Platform User Id",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/UserRoleData"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "employee_id",
+          "employee_no",
+          "name",
+          "mobile",
+          "status",
+          "platform_type",
+          "platform_user_id",
+          "roles",
+          "buildings"
+        ],
+        "title": "CurrentUserData",
+        "type": "object"
+      },
+      "DispatchNotificationsData": {
+        "properties": {
+          "claimed": {
+            "title": "Claimed",
+            "type": "integer"
+          },
+          "exhausted": {
+            "title": "Exhausted",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claimed",
+          "sent",
+          "failed",
+          "exhausted"
+        ],
+        "title": "DispatchNotificationsData",
+        "type": "object"
+      },
+      "DispatchNotificationsRequest": {
+        "properties": {
+          "batch_size": {
+            "default": 50,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Batch Size",
+            "type": "integer"
+          }
+        },
+        "title": "DispatchNotificationsRequest",
+        "type": "object"
+      },
+      "FieldsSaveData": {
+        "properties": {
+          "fields_complete": {
+            "title": "Fields Complete",
+            "type": "boolean"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "next_missing_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Missing Field"
+          },
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "status",
+          "version",
+          "missing_fields",
+          "fields_complete"
+        ],
+        "title": "FieldsSaveData",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HandlerCandidateData": {
+        "properties": {
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "integer"
+          },
+          "mobile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mobile"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "employee_id",
+          "name",
+          "mobile"
+        ],
+        "title": "HandlerCandidateData",
+        "type": "object"
+      },
+      "HandlerCandidateListData": {
+        "properties": {
+          "auto_selected_employee_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Selected Employee Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HandlerCandidateData"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "auto_selected_employee_id"
+        ],
+        "title": "HandlerCandidateListData",
+        "type": "object"
+      },
+      "HealthData": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HealthData",
+        "type": "object"
+      },
+      "MessageCreatedData": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duplicate": {
+            "default": false,
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "message_id",
+          "created_at"
+        ],
+        "title": "MessageCreatedData",
+        "type": "object"
+      },
+      "MessageData": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "external_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Message Id"
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "integer"
+          },
+          "sender_type": {
+            "title": "Sender Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "external_message_id",
+          "sender_type",
+          "content",
+          "created_at"
+        ],
+        "title": "MessageData",
+        "type": "object"
+      },
+      "MessageListData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageData"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "MessageListData",
+        "type": "object"
+      },
+      "NotificationItem": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dedup_key": {
+            "title": "Dedup Key",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "next_retry_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Retry At"
+          },
+          "notification_id": {
+            "title": "Notification Id",
+            "type": "integer"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "platform_type": {
+            "title": "Platform Type",
+            "type": "string"
+          },
+          "receiver_employee_id": {
+            "title": "Receiver Employee Id",
+            "type": "integer"
+          },
+          "receiver_platform_user_id_snapshot": {
+            "title": "Receiver Platform User Id Snapshot",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "integer"
+          },
+          "retry_count": {
+            "title": "Retry Count",
+            "type": "integer"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "notification_id",
+          "request_id",
+          "event_type",
+          "receiver_employee_id",
+          "platform_type",
+          "receiver_platform_user_id_snapshot",
+          "dedup_key",
+          "payload",
+          "status",
+          "retry_count",
+          "next_retry_at",
+          "last_error",
+          "created_at",
+          "sent_at",
+          "updated_at"
+        ],
+        "title": "NotificationItem",
+        "type": "object"
+      },
+      "NotificationListData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "NotificationListData",
+        "type": "object"
+      },
+      "ProductRecommendationData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductRecommendationItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ProductRecommendationData",
+        "type": "object"
+      },
+      "ProductRecommendationItem": {
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "historical_count": {
+            "title": "Historical Count",
+            "type": "integer"
+          },
+          "last_purchased_at": {
+            "format": "date-time",
+            "title": "Last Purchased At",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "required": [
+          "brand",
+          "model",
+          "historical_count",
+          "last_purchased_at"
+        ],
+        "title": "ProductRecommendationItem",
+        "type": "object"
+      },
+      "PurchaseFields": {
+        "properties": {
+          "actual_total_price": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,16}|(?=[\\d.]{1,19}0*$)\\d{0,16}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Total Price"
+          },
+          "actual_unit_price": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,16}|(?=[\\d.]{1,19}0*$)\\d{0,16}\\.\\d{0,2}0*$)",
+                "type": "string"
+              }
+            ],
+            "title": "Actual Unit Price"
+          },
+          "bank_account": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Account"
+          },
+          "bank_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Name"
+          },
+          "contract_contact_info": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Contact Info"
+          },
+          "purchase_remark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Remark"
+          },
+          "purchased_at": {
+            "format": "date-time",
+            "title": "Purchased At",
+            "type": "string"
+          },
+          "registered_address": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered Address"
+          },
+          "supplier_id": {
+            "title": "Supplier Id",
+            "type": "integer"
+          },
+          "supplier_tax_number": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Tax Number"
+          },
+          "tax_rate": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Rate"
+          },
+          "update_supplier_profile": {
+            "default": false,
+            "title": "Update Supplier Profile",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "supplier_id",
+          "actual_unit_price",
+          "purchased_at"
+        ],
+        "title": "PurchaseFields",
+        "type": "object"
+      },
+      "PurchaseHistoryItem": {
+        "properties": {
+          "actual_total_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Actual Total Price",
+            "type": "string"
+          },
+          "blacklist_status": {
+            "title": "Blacklist Status",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "device_name": {
+            "title": "Device Name",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "purchased_at": {
+            "format": "date-time",
+            "title": "Purchased At",
+            "type": "string"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "integer"
+          },
+          "supplier_id": {
+            "title": "Supplier Id",
+            "type": "integer"
+          },
+          "supplier_name": {
+            "title": "Supplier Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "device_name",
+          "brand",
+          "model",
+          "quantity",
+          "supplier_id",
+          "supplier_name",
+          "actual_total_price",
+          "purchased_at",
+          "blacklist_status"
+        ],
+        "title": "PurchaseHistoryItem",
+        "type": "object"
+      },
+      "PurchaseHistoryRecommendationData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PurchaseHistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PurchaseHistoryRecommendationData",
+        "type": "object"
+      },
+      "PurchaseRecordItem": {
+        "properties": {
+          "actual_total_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Total Price"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Name"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "purchased_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchased At"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "received_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received At"
+          },
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "integer"
+          },
+          "requirement_no": {
+            "title": "Requirement No",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "requirement_no",
+          "device_name",
+          "brand",
+          "model",
+          "quantity",
+          "unit",
+          "status",
+          "supplier_id",
+          "supplier_name",
+          "actual_total_price",
+          "purchased_at",
+          "created_at",
+          "submitted_at",
+          "reviewed_at",
+          "received_at",
+          "completed_at"
+        ],
+        "title": "PurchaseRecordItem",
+        "type": "object"
+      },
+      "PurchaseRecordListData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PurchaseRecordItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "PurchaseRecordListData",
+        "type": "object"
+      },
+      "ReadinessData": {
+        "properties": {
+          "mysql": {
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "title": "Mysql",
+            "type": "string"
+          },
+          "redis": {
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "title": "Redis",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "not_ready"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "mysql",
+          "redis"
+        ],
+        "title": "ReadinessData",
+        "type": "object"
+      },
+      "RejectRequest": {
+        "properties": {
+          "action_token": {
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Action Token",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "action_token",
+          "reason"
+        ],
+        "title": "RejectRequest",
+        "type": "object"
+      },
+      "ReleaseBlacklistRequest": {
+        "properties": {
+          "action_token": {
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Action Token",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "action_token"
+        ],
+        "title": "ReleaseBlacklistRequest",
+        "type": "object"
+      },
+      "RequirementDetailData": {
+        "properties": {
+          "allowed_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Actions",
+            "type": "array"
+          },
+          "applicant_fields": {
+            "additionalProperties": true,
+            "title": "Applicant Fields",
+            "type": "object"
+          },
+          "building": {
+            "additionalProperties": true,
+            "title": "Building",
+            "type": "object"
+          },
+          "current_handler": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Handler"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "purchase_execution": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Execution"
+          },
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "integer"
+          },
+          "requirement_no": {
+            "title": "Requirement No",
+            "type": "string"
+          },
+          "review_records": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Review Records",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "warehouse_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warehouse Receipt"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "requirement_no",
+          "status",
+          "version",
+          "building",
+          "current_handler",
+          "applicant_fields",
+          "review_records",
+          "purchase_execution",
+          "warehouse_receipt",
+          "missing_fields",
+          "allowed_actions"
+        ],
+        "title": "RequirementDetailData",
+        "type": "object"
+      },
+      "RequirementListData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RequirementListItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "RequirementListData",
+        "type": "object"
+      },
+      "RequirementListItem": {
+        "properties": {
+          "current_handler_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Handler Name"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Name"
+          },
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "integer"
+          },
+          "requirement_no": {
+            "title": "Requirement No",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "requirement_no",
+          "device_name",
+          "status",
+          "current_handler_name"
+        ],
+        "title": "RequirementListItem",
+        "type": "object"
+      },
+      "RequirementMutationData": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "current_handler": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrentHandlerData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "integer"
+          },
+          "requirement_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement No"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "status",
+          "version"
+        ],
+        "title": "RequirementMutationData",
+        "type": "object"
+      },
+      "ResendNotificationData": {
+        "properties": {
+          "next_retry_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Retry At"
+          },
+          "notification_id": {
+            "title": "Notification Id",
+            "type": "integer"
+          },
+          "retry_count": {
+            "title": "Retry Count",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "notification_id",
+          "status",
+          "retry_count",
+          "next_retry_at"
+        ],
+        "title": "ResendNotificationData",
+        "type": "object"
+      },
+      "ResendNotificationRequest": {
+        "properties": {
+          "action_token": {
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Action Token",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "action_token"
+        ],
+        "title": "ResendNotificationRequest",
+        "type": "object"
+      },
+      "ReviewFields": {
+        "properties": {
+          "contract_type": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Type"
+          },
+          "estimated_total_price": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,16}|(?=[\\d.]{1,19}0*$)\\d{0,16}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Total Price"
+          },
+          "estimated_unit_price": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,16}|(?=[\\d.]{1,19}0*$)\\d{0,16}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Unit Price"
+          },
+          "expected_arrival_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Arrival Date"
+          },
+          "need_contract": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need Contract"
+          },
+          "payment_method": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method"
+          },
+          "proposed_supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Supplier Id"
+          },
+          "proposed_supplier_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Supplier Name"
+          },
+          "review_remark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Remark"
+          },
+          "supplier_contact_info": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Contact Info"
+          },
+          "supplier_contact_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Contact Name"
+          },
+          "supplier_link": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Link"
+          },
+          "warranty_info": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Info"
+          }
+        },
+        "title": "ReviewFields",
+        "type": "object"
+      },
+      "SaveApplicantFieldsRequest": {
+        "properties": {
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/ApplicantFields"
+          }
+        },
+        "required": [
+          "expected_version",
+          "fields"
+        ],
+        "title": "SaveApplicantFieldsRequest",
+        "type": "object"
+      },
+      "SavePurchaseFieldsRequest": {
+        "properties": {
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/PurchaseFields"
+          }
+        },
+        "required": [
+          "expected_version",
+          "fields"
+        ],
+        "title": "SavePurchaseFieldsRequest",
+        "type": "object"
+      },
+      "SaveReviewFieldsRequest": {
+        "properties": {
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/ReviewFields"
+          }
+        },
+        "required": [
+          "expected_version",
+          "fields"
+        ],
+        "title": "SaveReviewFieldsRequest",
+        "type": "object"
+      },
+      "SaveSnapshotRequest": {
+        "properties": {
+          "snapshot_reason": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Snapshot Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_reason"
+        ],
+        "title": "SaveSnapshotRequest",
+        "type": "object"
+      },
+      "SaveWarehouseFieldsRequest": {
+        "properties": {
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/WarehouseFields"
+          }
+        },
+        "required": [
+          "expected_version",
+          "fields"
+        ],
+        "title": "SaveWarehouseFieldsRequest",
+        "type": "object"
+      },
+      "SnapshotSavedData": {
+        "properties": {
+          "saved_at": {
+            "format": "date-time",
+            "title": "Saved At",
+            "type": "string"
+          },
+          "state_id": {
+            "title": "State Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state_id",
+          "saved_at"
+        ],
+        "title": "SnapshotSavedData",
+        "type": "object"
+      },
+      "StateSavedData": {
+        "properties": {
+          "expires_in_seconds": {
+            "title": "Expires In Seconds",
+            "type": "integer"
+          },
+          "saved": {
+            "default": true,
+            "title": "Saved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expires_in_seconds"
+        ],
+        "title": "StateSavedData",
+        "type": "object"
+      },
+      "SupplierBlacklistSummary": {
+        "properties": {
+          "history_count": {
+            "title": "History Count",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "history_count"
+        ],
+        "title": "SupplierBlacklistSummary",
+        "type": "object"
+      },
+      "SupplierCreateRequest": {
+        "properties": {
+          "bank_account": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Account"
+          },
+          "bank_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Name"
+          },
+          "contract_contact_info": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Contact Info"
+          },
+          "registered_address": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered Address"
+          },
+          "supplier_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Supplier Name",
+            "type": "string"
+          },
+          "unified_social_credit_code": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unified Social Credit Code"
+          }
+        },
+        "required": [
+          "supplier_name"
+        ],
+        "title": "SupplierCreateRequest",
+        "type": "object"
+      },
+      "SupplierCreatedData": {
+        "properties": {
+          "supplier_id": {
+            "title": "Supplier Id",
+            "type": "integer"
+          },
+          "supplier_name": {
+            "title": "Supplier Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "supplier_id",
+          "supplier_name"
+        ],
+        "title": "SupplierCreatedData",
+        "type": "object"
+      },
+      "SupplierDetailData": {
+        "properties": {
+          "bank_account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Account"
+          },
+          "bank_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Name"
+          },
+          "blacklist": {
+            "$ref": "#/components/schemas/SupplierBlacklistSummary"
+          },
+          "contract_contact_info": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Contact Info"
+          },
+          "registered_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered Address"
+          },
+          "supplier_id": {
+            "title": "Supplier Id",
+            "type": "integer"
+          },
+          "supplier_name": {
+            "title": "Supplier Name",
+            "type": "string"
+          },
+          "unified_social_credit_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unified Social Credit Code"
+          }
+        },
+        "required": [
+          "supplier_id",
+          "supplier_name",
+          "unified_social_credit_code",
+          "bank_name",
+          "bank_account",
+          "registered_address",
+          "contract_contact_info",
+          "blacklist"
+        ],
+        "title": "SupplierDetailData",
+        "type": "object"
+      },
+      "SupplierRecommendationData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierRecommendationItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SupplierRecommendationData",
+        "type": "object"
+      },
+      "SupplierRecommendationItem": {
+        "properties": {
+          "blacklist_status": {
+            "title": "Blacklist Status",
+            "type": "string"
+          },
+          "historical_purchase_count": {
+            "title": "Historical Purchase Count",
+            "type": "integer"
+          },
+          "last_purchase_at": {
+            "format": "date-time",
+            "title": "Last Purchase At",
+            "type": "string"
+          },
+          "supplier_id": {
+            "title": "Supplier Id",
+            "type": "integer"
+          },
+          "supplier_name": {
+            "title": "Supplier Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "supplier_id",
+          "supplier_name",
+          "historical_purchase_count",
+          "last_purchase_at",
+          "blacklist_status"
+        ],
+        "title": "SupplierRecommendationItem",
+        "type": "object"
+      },
+      "SupplierSearchData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierSummaryData"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "SupplierSearchData",
+        "type": "object"
+      },
+      "SupplierSummaryData": {
+        "properties": {
+          "blacklist_status": {
+            "title": "Blacklist Status",
+            "type": "string"
+          },
+          "supplier_id": {
+            "title": "Supplier Id",
+            "type": "integer"
+          },
+          "supplier_name": {
+            "title": "Supplier Name",
+            "type": "string"
+          },
+          "unified_social_credit_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unified Social Credit Code"
+          }
+        },
+        "required": [
+          "supplier_id",
+          "supplier_name",
+          "unified_social_credit_code",
+          "blacklist_status"
+        ],
+        "title": "SupplierSummaryData",
+        "type": "object"
+      },
+      "TimelineContactData": {
+        "properties": {
+          "employee_name": {
+            "title": "Employee Name",
+            "type": "string"
+          },
+          "mobile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mobile"
+          }
+        },
+        "required": [
+          "employee_name",
+          "mobile"
+        ],
+        "title": "TimelineContactData",
+        "type": "object"
+      },
+      "TimelineData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TimelineData",
+        "type": "object"
+      },
+      "TimelineItem": {
+        "properties": {
+          "action_type": {
+            "title": "Action Type",
+            "type": "string"
+          },
+          "assigned_to_employee_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To Employee Id"
+          },
+          "assigned_to_mobile_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To Mobile Masked"
+          },
+          "assigned_to_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To Name"
+          },
+          "from_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Status"
+          },
+          "log_id": {
+            "title": "Log Id",
+            "type": "integer"
+          },
+          "operated_at": {
+            "format": "date-time",
+            "title": "Operated At",
+            "type": "string"
+          },
+          "operation_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Summary"
+          },
+          "operator_mobile_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Mobile Masked"
+          },
+          "operator_name": {
+            "title": "Operator Name",
+            "type": "string"
+          },
+          "operator_role_name": {
+            "title": "Operator Role Name",
+            "type": "string"
+          },
+          "to_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Status"
+          }
+        },
+        "required": [
+          "log_id",
+          "action_type",
+          "operator_name",
+          "operator_role_name",
+          "operator_mobile_masked",
+          "from_status",
+          "to_status",
+          "assigned_to_employee_id",
+          "assigned_to_name",
+          "assigned_to_mobile_masked",
+          "operation_summary",
+          "operated_at"
+        ],
+        "title": "TimelineItem",
+        "type": "object"
+      },
+      "UserBuildingData": {
+        "properties": {
+          "building_id": {
+            "title": "Building Id",
+            "type": "integer"
+          },
+          "building_name": {
+            "title": "Building Name",
+            "type": "string"
+          },
+          "is_primary": {
+            "title": "Is Primary",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "building_id",
+          "building_name",
+          "is_primary"
+        ],
+        "title": "UserBuildingData",
+        "type": "object"
+      },
+      "UserRoleData": {
+        "properties": {
+          "role_code": {
+            "title": "Role Code",
+            "type": "string"
+          },
+          "role_id": {
+            "title": "Role Id",
+            "type": "integer"
+          },
+          "role_name": {
+            "title": "Role Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role_id",
+          "role_code",
+          "role_name"
+        ],
+        "title": "UserRoleData",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WarehouseFields": {
+        "properties": {
+          "receipt_remark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Remark"
+          },
+          "received_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,15}|(?=[\\d.]{1,19}0*$)\\d{0,15}\\.\\d{0,3}0*$)",
+                "type": "string"
+              }
+            ],
+            "title": "Received Quantity"
+          },
+          "warehouse_location": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Warehouse Location",
+            "type": "string"
+          }
+        },
+        "required": [
+          "warehouse_location",
+          "received_quantity"
+        ],
+        "title": "WarehouseFields",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Procurement Agent",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/agent/conversations/active": {
+      "post": {
+        "operationId": "get_or_create_active_conversation_api_v1_agent_conversations_active_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActiveConversationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ActiveConversationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Or Create Active Conversation",
+        "tags": [
+          "agent-support"
+        ]
+      }
+    },
+    "/api/v1/agent/conversations/{conversation_id}/complete": {
+      "post": {
+        "operationId": "complete_conversation_api_v1_agent_conversations__conversation_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteConversationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConversationCompletedData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Conversation",
+        "tags": [
+          "agent-support"
+        ]
+      }
+    },
+    "/api/v1/agent/conversations/{conversation_id}/messages": {
+      "get": {
+        "operationId": "list_conversation_messages_api_v1_agent_conversations__conversation_id__messages_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MessageListData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Conversation Messages",
+        "tags": [
+          "agent-support"
+        ]
+      },
+      "post": {
+        "operationId": "create_conversation_message_api_v1_agent_conversations__conversation_id__messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MessageCreatedData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Conversation Message",
+        "tags": [
+          "agent-support"
+        ]
+      }
+    },
+    "/api/v1/agent/conversations/{conversation_id}/snapshot": {
+      "post": {
+        "operationId": "save_conversation_snapshot_api_v1_agent_conversations__conversation_id__snapshot_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSnapshotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SnapshotSavedData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Conversation Snapshot",
+        "tags": [
+          "agent-support"
+        ]
+      }
+    },
+    "/api/v1/agent/conversations/{conversation_id}/state": {
+      "get": {
+        "operationId": "get_conversation_state_api_v1_agent_conversations__conversation_id__state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConversationStateData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Conversation State",
+        "tags": [
+          "agent-support"
+        ]
+      },
+      "put": {
+        "operationId": "save_conversation_state_api_v1_agent_conversations__conversation_id__state_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationStatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_StateSavedData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Conversation State",
+        "tags": [
+          "agent-support"
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "operationId": "list_notifications_api_v1_notifications_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "request_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Request Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NotificationListData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Notifications",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/dispatch-due": {
+      "post": {
+        "operationId": "dispatch_due_notifications_api_v1_notifications_dispatch_due_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchNotificationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DispatchNotificationsData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dispatch Due Notifications",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{notification_id}/resend": {
+      "post": {
+        "operationId": "resend_notification_api_v1_notifications__notification_id__resend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notification_id",
+            "required": true,
+            "schema": {
+              "title": "Notification Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendNotificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ResendNotificationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resend Notification",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/purchase-records": {
+      "get": {
+        "operationId": "list_purchase_records_api_v1_purchase_records_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "requirement_no",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Requirement No"
+            }
+          },
+          {
+            "in": "query",
+            "name": "supplier_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device_name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Name"
+            }
+          },
+          {
+            "in": "query",
+            "name": "brand",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Brand"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PurchaseRecordListData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Purchase Records",
+        "tags": [
+          "purchase-records"
+        ]
+      }
+    },
+    "/api/v1/recommendations/products": {
+      "get": {
+        "operationId": "recommend_products_api_v1_recommendations_products_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "device_name",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Device Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device_profession",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Profession"
+            }
+          },
+          {
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ProductRecommendationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recommend Products",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/api/v1/recommendations/purchase-history": {
+      "get": {
+        "operationId": "recommend_purchase_history_api_v1_recommendations_purchase_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PurchaseHistoryRecommendationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recommend Purchase History",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/api/v1/recommendations/suppliers": {
+      "get": {
+        "operationId": "recommend_suppliers_api_v1_recommendations_suppliers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SupplierRecommendationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recommend Suppliers",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/api/v1/requirements": {
+      "get": {
+        "operationId": "list_requirements_api_v1_requirements_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "view",
+            "required": true,
+            "schema": {
+              "enum": [
+                "CREATED_BY_ME",
+                "PENDING_FOR_ME",
+                "PROCESSED_BY_ME",
+                "BUILDING_SCOPE"
+              ],
+              "title": "View",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementListData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Requirements",
+        "tags": [
+          "requirements"
+        ]
+      },
+      "post": {
+        "operationId": "create_requirement_api_v1_requirements_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRequirementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementMutationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Requirement",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}": {
+      "get": {
+        "operationId": "get_requirement_detail_api_v1_requirements__requirement_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementDetailData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Requirement Detail",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/applicant-fields": {
+      "patch": {
+        "operationId": "save_applicant_fields_api_v1_requirements__requirement_id__applicant_fields_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveApplicantFieldsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FieldsSaveData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Applicant Fields",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/complete": {
+      "post": {
+        "operationId": "complete_requirement_api_v1_requirements__requirement_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementMutationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Requirement",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/handler-candidates": {
+      "get": {
+        "operationId": "get_handler_candidates_api_v1_requirements__requirement_id__handler_candidates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_role",
+            "required": true,
+            "schema": {
+              "title": "Target Role",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_HandlerCandidateListData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Handler Candidates",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/purchase-fields": {
+      "patch": {
+        "operationId": "save_purchase_fields_api_v1_requirements__requirement_id__purchase_fields_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePurchaseFieldsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FieldsSaveData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Purchase Fields",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/reject": {
+      "post": {
+        "operationId": "reject_requirement_api_v1_requirements__requirement_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementMutationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Requirement",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/resubmit-review": {
+      "post": {
+        "operationId": "resubmit_review_api_v1_requirements__requirement_id__resubmit_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignedActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementMutationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resubmit Review",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/review-fields": {
+      "patch": {
+        "operationId": "save_review_fields_api_v1_requirements__requirement_id__review_fields_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveReviewFieldsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FieldsSaveData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Review Fields",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/start-purchase": {
+      "post": {
+        "operationId": "start_purchase_api_v1_requirements__requirement_id__start_purchase_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementMutationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Purchase",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/submit-purchaser": {
+      "post": {
+        "operationId": "submit_purchaser_api_v1_requirements__requirement_id__submit_purchaser_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignedActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementMutationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Purchaser",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/submit-review": {
+      "post": {
+        "operationId": "submit_review_api_v1_requirements__requirement_id__submit_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignedActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementMutationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Review",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/submit-warehouse": {
+      "post": {
+        "operationId": "submit_warehouse_api_v1_requirements__requirement_id__submit_warehouse_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignedActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequirementMutationData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Warehouse",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/timeline": {
+      "get": {
+        "operationId": "get_requirement_timeline_api_v1_requirements__requirement_id__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TimelineData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Requirement Timeline",
+        "tags": [
+          "purchase-records"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/timeline/{log_id}/contact": {
+      "get": {
+        "operationId": "get_timeline_contact_api_v1_requirements__requirement_id__timeline__log_id__contact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "log_id",
+            "required": true,
+            "schema": {
+              "title": "Log Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "required": false,
+            "schema": {
+              "default": "operator",
+              "enum": [
+                "operator",
+                "assignee"
+              ],
+              "title": "Subject",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TimelineContactData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Timeline Contact",
+        "tags": [
+          "purchase-records"
+        ]
+      }
+    },
+    "/api/v1/requirements/{requirement_id}/warehouse-fields": {
+      "patch": {
+        "operationId": "save_warehouse_fields_api_v1_requirements__requirement_id__warehouse_fields_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requirement_id",
+            "required": true,
+            "schema": {
+              "title": "Requirement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveWarehouseFieldsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FieldsSaveData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Warehouse Fields",
+        "tags": [
+          "requirements"
+        ]
+      }
+    },
+    "/api/v1/suppliers": {
+      "get": {
+        "operationId": "search_suppliers_api_v1_suppliers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "keyword",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Keyword",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SupplierSearchData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Suppliers",
+        "tags": [
+          "suppliers"
+        ]
+      },
+      "post": {
+        "operationId": "create_supplier_api_v1_suppliers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SupplierCreatedData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Supplier",
+        "tags": [
+          "suppliers"
+        ]
+      }
+    },
+    "/api/v1/suppliers/{supplier_id}": {
+      "get": {
+        "operationId": "get_supplier_api_v1_suppliers__supplier_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supplier_id",
+            "required": true,
+            "schema": {
+              "title": "Supplier Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SupplierDetailData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Supplier",
+        "tags": [
+          "suppliers"
+        ]
+      }
+    },
+    "/api/v1/suppliers/{supplier_id}/blacklist": {
+      "post": {
+        "operationId": "create_supplier_blacklist_api_v1_suppliers__supplier_id__blacklist_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supplier_id",
+            "required": true,
+            "schema": {
+              "title": "Supplier Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBlacklistRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BlacklistCreatedData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Supplier Blacklist",
+        "tags": [
+          "suppliers"
+        ]
+      }
+    },
+    "/api/v1/suppliers/{supplier_id}/blacklists/{blacklist_id}/release": {
+      "post": {
+        "operationId": "release_supplier_blacklist_api_v1_suppliers__supplier_id__blacklists__blacklist_id__release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supplier_id",
+            "required": true,
+            "schema": {
+              "title": "Supplier Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "blacklist_id",
+            "required": true,
+            "schema": {
+              "title": "Blacklist Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseBlacklistRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BlacklistReleasedData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Supplier Blacklist",
+        "tags": [
+          "suppliers"
+        ]
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "operationId": "get_me_api_v1_users_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CurrentUserData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Me",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_HealthData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/ready": {
+      "get": {
+        "operationId": "readiness_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReadinessData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readiness",
+        "tags": [
+          "system"
+        ]
+      }
+    }
+  }
+}

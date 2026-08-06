@@ -16,6 +16,7 @@ dist/
 build/
 .codex-qa/
 .artifacts/
+.tmp/
 
 # IDE and OS
 .idea/

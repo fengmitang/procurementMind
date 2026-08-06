@@ -44,11 +44,14 @@
           <button class="nav-item" data-tab="records" type="button">
             <span>03</span>历史与时间线
           </button>
+          <button class="nav-item" data-tab="assistant" type="button">
+            <span>04</span>智能协同
+          </button>
           <button class="nav-item" data-tab="agent" type="button">
-            <span>04</span>Agent 存储
+            <span>05</span>Agent 存储
           </button>
           <button class="nav-item" data-tab="notifications" type="button">
-            <span>05</span>通知 Outbox
+            <span>06</span>通知 Outbox
           </button>
         </nav>
 
@@ -269,6 +272,72 @@
               <div class="empty-state">在上方历史记录中点击“查看时间线”。</div>
             </div>
           </article>
+        </section>
+
+        <section class="tab-page" id="tab-assistant">
+          <div class="assistant-hero">
+            <div>
+              <div class="eyebrow">PROCUREMENT INTELLIGENCE</div>
+              <h2>采购智能协同</h2>
+              <p>用自然语言查询采购数据、生成结构化分析，或调查指定采购申请的确定性风险。</p>
+            </div>
+            <div class="capability-status" aria-label="当前能力状态">
+              <span class="capability-chip ready">业务数据已连接</span>
+              <span class="capability-chip pending">真实模型待配置</span>
+              <span class="capability-chip pending">制度材料待提供</span>
+            </div>
+          </div>
+
+          <div class="assistant-layout">
+            <article class="panel assistant-chat-panel">
+              <div class="panel-header compact">
+                <div>
+                  <div class="eyebrow">CONVERSATION</div>
+                  <h2>协同对话</h2>
+                </div>
+                <span class="assistant-task-status idle" id="assistant-task-status">等待提问</span>
+              </div>
+
+              <div class="assistant-prompts" aria-label="示例问题">
+                <button type="button" data-assistant-prompt="统计 2026-08-01 到 2026-08-05 算力服务器各品牌采购数量、平均单价、中位价和总金额">采购统计</button>
+                <button type="button" data-assistant-prompt="调查采购申请 91009 的审批风险">风险调查</button>
+                <button type="button" data-assistant-prompt="采购流程有哪些规定">制度问答</button>
+              </div>
+
+              <div class="assistant-messages" id="assistant-messages" aria-live="polite">
+                <div class="assistant-message system">
+                  <strong>系统</strong>
+                  <p>当前可以执行实时采购查询、复杂统计和确定性风险调查。模型与制度材料尚未配置的能力会明确提示。</p>
+                </div>
+              </div>
+
+              <form class="assistant-composer" id="assistant-form">
+                <label for="assistant-input">输入采购问题</label>
+                <textarea id="assistant-input" rows="3" maxlength="8000" placeholder="例如：统计各楼宇服务器采购总金额，排除黑名单和延期供应商"></textarea>
+                <div class="assistant-composer-footer">
+                  <small>身份和数据范围跟随左侧当前体验身份</small>
+                  <button class="button primary" id="assistant-send" type="submit">发送分析</button>
+                </div>
+              </form>
+            </article>
+
+            <article class="panel assistant-result-panel">
+              <div class="panel-header compact">
+                <div>
+                  <div class="eyebrow">STRUCTURED RESULT</div>
+                  <h2>分析结果</h2>
+                </div>
+                <div class="assistant-run-meta" id="assistant-run-meta"></div>
+              </div>
+              <div id="assistant-result">
+                <div class="empty-detail assistant-empty">
+                  <div class="empty-symbol">✦</div>
+                  <h3>等待一次智能协同请求</h3>
+                  <p>这里会展示统计口径、表格、风险证据和不完整状态，而不只是一段自然语言。</p>
+                </div>
+              </div>
+            </article>
+          </div>
         </section>
 
         <section class="tab-page" id="tab-agent">

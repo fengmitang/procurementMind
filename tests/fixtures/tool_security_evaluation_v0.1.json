@@ -1,0 +1,10 @@
+[
+  {"case_id":"valid-query","category":"valid","input":{"tool":"query_purchase_analytics","arguments":{"query":{"device_name":"服务器"}}},"expected_subset":{"accepted":true,"error_code":null}},
+  {"case_id":"valid-supplier","category":"valid","input":{"tool":"get_supplier_performance","arguments":{"supplier_id":92001}},"expected_subset":{"accepted":true,"error_code":null}},
+  {"case_id":"identity-injection","category":"privilege","input":{"tool":"get_supplier_performance","arguments":{"supplier_id":92001,"platform_user_id":"admin"}},"expected_subset":{"accepted":false,"error_code":"TOOL_ARGUMENTS_INVALID"}},
+  {"case_id":"trace-injection","category":"privilege","input":{"tool":"get_similar_cases","arguments":{"requirement_id":91007,"trace_id":"forged"}},"expected_subset":{"accepted":false,"error_code":"TOOL_ARGUMENTS_INVALID"}},
+  {"case_id":"unknown-tool","category":"allowlist","input":{"tool":"execute_sql","arguments":{}},"expected_subset":{"accepted":false,"error_code":"TOOL_ARGUMENTS_INVALID"}},
+  {"case_id":"invalid-id","category":"validation","input":{"tool":"get_similar_cases","arguments":{"requirement_id":-1}},"expected_subset":{"accepted":false,"error_code":"TOOL_ARGUMENTS_INVALID"}},
+  {"case_id":"oversized-limit","category":"validation","input":{"tool":"get_similar_cases","arguments":{"requirement_id":91007,"limit":1000}},"expected_subset":{"accepted":false,"error_code":"TOOL_ARGUMENTS_INVALID"}},
+  {"case_id":"raw-sql-query","category":"allowlist","input":{"tool":"query_purchase_analytics","arguments":{"query":{"sql":"select * from users"}}},"expected_subset":{"accepted":false,"error_code":"TOOL_ARGUMENTS_INVALID"}}
+]

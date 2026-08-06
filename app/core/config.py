@@ -20,13 +20,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     mysql_host: str = "127.0.0.1"
-    mysql_port: int = 3307
-    mysql_database: str = "procurement_agent"
-    mysql_user: str = "procurement_agent_app"
+    mysql_port: int = 13307
+    mysql_database: str = "procurement_mind"
+    mysql_user: str = "procurement_mind_app"
     mysql_password: str = Field(repr=False)
 
     redis_host: str = "127.0.0.1"
-    redis_port: int = 6380
+    redis_port: int = 16380
     redis_password: str = Field(repr=False)
     redis_db: int = 0
     agent_session_ttl_seconds: int = 259200
@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     notification_retry_base_seconds: int = 60
     notification_retry_max_seconds: int = 86400
     notification_worker_batch_size: int = 50
+
+    analytics_query_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    analytics_max_scan_rows: int = Field(default=5000, ge=100, le=50000)
+    analytics_default_range_days: int = Field(default=365, ge=30, le=1095)
+    risk_duplicate_window_days: int = Field(default=30, ge=1, le=365)
+    risk_price_deviation_ratio: float = Field(default=0.2, ge=0.01, le=5)
+    risk_quantity_deviation_ratio: float = Field(default=0.5, ge=0.01, le=5)
+    risk_long_pending_days: int = Field(default=14, ge=1, le=365)
+
+    agent_service_url: str = "http://127.0.0.1:8100"
+    agent_service_timeout_seconds: float = Field(default=130.0, gt=0, le=1800)
 
     @property
     def database_url(self) -> str:

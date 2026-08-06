@@ -17,6 +17,8 @@ dependencies = [
   "alembic==1.18.5",
   "redis>=6.0,<8.0",
   "httpx>=0.28,<1.0",
+  "mcp>=1.27,<2.0",
+  "langgraph>=1.2,<2.0",
 ]
 
 [project.optional-dependencies]
@@ -27,7 +29,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["app*", "agent_app*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

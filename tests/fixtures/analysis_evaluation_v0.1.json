@@ -1,0 +1,38 @@
+[
+  {
+    "id": "aggregate-by-brand",
+    "message": "统计 2026-08-01 到 2026-08-05 算力服务器各品牌采购数量、平均单价、中位价和总金额",
+    "expected_tool": "query_purchase_analytics",
+    "expected_query": {
+      "created_from": "2026-08-01",
+      "created_to": "2026-08-05",
+      "device_professions": ["算力服务器"],
+      "group_by": "BRAND",
+      "aggregations": ["COUNT", "AVERAGE_UNIT_PRICE", "MEDIAN_UNIT_PRICE", "TOTAL_AMOUNT"]
+    }
+  },
+  {
+    "id": "safe-exclusions",
+    "message": "统计各楼宇服务器采购总金额，排除黑名单和延期供应商",
+    "expected_tool": "query_purchase_analytics",
+    "expected_query": {
+      "device_name": "服务器",
+      "group_by": "BUILDING",
+      "exclude_blacklisted": true,
+      "exclude_delayed_suppliers": true,
+      "aggregations": ["TOTAL_AMOUNT"]
+    }
+  },
+  {
+    "id": "supplier-performance",
+    "message": "查看供应商 92001 的履约表现",
+    "expected_tool": "get_supplier_performance",
+    "expected_arguments": {"supplier_id": 92001}
+  },
+  {
+    "id": "similar-cases",
+    "message": "查找采购申请 91007 的相似案例",
+    "expected_tool": "get_similar_cases",
+    "expected_arguments": {"requirement_id": 91007, "limit": 10}
+  }
+]

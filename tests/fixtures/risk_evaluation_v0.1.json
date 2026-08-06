@@ -1,0 +1,17 @@
+[
+  {
+    "case_id": "price-risk-91009",
+    "expected_risk_codes": ["PRICE_DEVIATION"],
+    "forbidden_risk_codes": ["SUPPLIER_BLACKLIST"]
+  },
+  {
+    "case_id": "blacklist-risk-91005",
+    "expected_risk_codes": ["SUPPLIER_BLACKLIST"],
+    "forbidden_risk_codes": ["DELIVERY_DELAY"]
+  },
+  {
+    "case_id": "normal-risk-91001",
+    "expected_risk_codes": [],
+    "forbidden_risk_codes": ["PRICE_DEVIATION", "SUPPLIER_BLACKLIST", "DELIVERY_DELAY"]
+  }
+]

@@ -1,4 +1,7 @@
+from typing import Any
+
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -6,21 +9,35 @@ from app.core.request_context import request_id_context
 
 
 class AppError(Exception):
-    def __init__(self, code: str, message: str, status_code: int) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int,
+        *,
+        details: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.status_code = status_code
+        self.details = details
 
 
-def error_response(code: str, message: str, status_code: int) -> JSONResponse:
+def error_response(
+    code: str,
+    message: str,
+    status_code: int,
+    *,
+    details: dict[str, Any] | None = None,
+) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
         content={
             "success": False,
             "code": code,
             "message": message,
-            "data": None,
+            "data": details,
             "trace_id": request_id_context.get(),
         },
     )
@@ -29,7 +46,12 @@ def error_response(code: str, message: str, status_code: int) -> JSONResponse:
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_exception_handler(_: Request, exc: AppError) -> JSONResponse:
-        return error_response(exc.code, exc.message, exc.status_code)
+        return error_response(
+            exc.code,
+            exc.message,
+            exc.status_code,
+            details=exc.details,
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
@@ -39,7 +61,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "success": False,
                 "code": "VALIDATION_ERROR",
                 "message": "请求参数校验失败",
-                "data": {"errors": exc.errors()},
+                "data": {"errors": jsonable_encoder(exc.errors(), custom_encoder={Exception: str})},
                 "trace_id": request_id_context.get(),
             },
         )

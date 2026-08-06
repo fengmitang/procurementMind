@@ -134,9 +134,7 @@ async def test_timeline_masks_contacts_and_authorized_roles_can_reveal_them() ->
             assert authorized_contact.status_code == 200, authorized_contact.text
             assert authorized_contact.json()["data"]["mobile"] == "13800009004"
 
-        purchaser_contact_path = (
-            "/api/v1/requirements/91006/timeline/99006/contact"
-        )
+        purchaser_contact_path = "/api/v1/requirements/91006/timeline/99006/contact"
         purchaser_contact = await get(
             client,
             purchaser_contact_path,

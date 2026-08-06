@@ -386,10 +386,7 @@ async def test_complete_procurement_flow_with_rejection_and_resubmission() -> No
             assert len(detail_data["review_records"]) == 2
             assert detail_data["warehouse_receipt"]["received_quantity"] == "4.000"
             assert detail_data["purchase_execution"]["bank_account"] == "TEST****2001"
-            assert (
-                detail_data["purchase_execution"]["purchased_at"]
-                == "2026-08-03T14:30:00"
-            )
+            assert detail_data["purchase_execution"]["purchased_at"] == "2026-08-03T14:30:00"
 
             listed = await call(
                 client,

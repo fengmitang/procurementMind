@@ -13,7 +13,11 @@ from app.models.procurement import (
 
 
 def effective_blacklist_condition(now: datetime):
-    return (SupplierBlacklist.status == "ACTIVE") & (
+    return (
+        (SupplierBlacklist.status == "ACTIVE")
+        & (SupplierBlacklist.start_at <= now)
+        & SupplierBlacklist.released_at.is_(None)
+    ) & (
         (SupplierBlacklist.duration_type == "PERMANENT")
         | ((SupplierBlacklist.duration_type == "LIMITED") & (SupplierBlacklist.end_at > now))
     )

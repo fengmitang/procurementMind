@@ -118,6 +118,7 @@ const pageNames = {
   procurement: "采购流程",
   suppliers: "供应商与推荐",
   records: "历史与时间线",
+  assistant: "智能协同",
   agent: "Agent 存储",
   notifications: "通知 Outbox",
 };
@@ -129,6 +130,9 @@ const state = {
   requirementId: null,
   requirement: null,
   requirementDirty: false,
+  assistantConversationId: null,
+  assistantBackendConversationId: null,
+  assistantBusy: false,
   agentConversationId: null,
 };
 
@@ -263,6 +267,9 @@ async function switchRole(roleId) {
   state.requirement = null;
   state.requirementId = null;
   state.requirementDirty = false;
+  state.assistantConversationId = null;
+  state.assistantBackendConversationId = null;
+  resetAssistantWorkspace();
   state.agentConversationId = null;
   renderRoleWorkspace();
   renderEmptyRequirement();
@@ -1177,6 +1184,439 @@ async function revealTimelineContact(button) {
   button.title = `${data.employee_name}的完整手机号`;
 }
 
+function resetAssistantWorkspace() {
+  const messages = $("#assistant-messages");
+  const result = $("#assistant-result");
+  if (!messages || !result) return;
+  messages.innerHTML = `
+    <div class="assistant-message system">
+      <strong>系统</strong>
+      <p>当前支持制度检索与引用、实时采购查询、混合分析和操作草稿。所有正式业务动作必须由你确认后才会交给采购后端执行。</p>
+    </div>`;
+  result.innerHTML = `
+    <div class="empty-detail assistant-empty">
+      <div class="empty-symbol">✦</div>
+      <h3>等待一次智能协同请求</h3>
+      <p>这里会展示统计口径、表格、风险证据和不完整状态，而不只是一段自然语言。</p>
+    </div>`;
+  $("#assistant-run-meta").innerHTML = "";
+  setAssistantStatus("idle", "等待提问");
+}
+
+function setAssistantStatus(kind, label) {
+  const element = $("#assistant-task-status");
+  element.className = `assistant-task-status ${kind}`;
+  element.textContent = label;
+}
+
+function appendAssistantMessage(role, content) {
+  const container = $("#assistant-messages");
+  const element = document.createElement("div");
+  element.className = `assistant-message ${role}`;
+  element.innerHTML = `<strong>${role === "user" ? escapeHtml(state.role.name) : "智能协同"}</strong><p>${escapeHtml(content)}</p>`;
+  container.appendChild(element);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function assistantApi(message) {
+  const response = await fetch("/demo-api/agent-chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      platform_user_id: state.role.id,
+      message,
+      external_conversation_id: state.assistantConversationId,
+      external_message_id: `web:${crypto.randomUUID()}`,
+    }),
+  });
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("Agent 服务返回了无法读取的响应");
+  }
+  if (!response.ok || payload.success === false) {
+    const error = new Error(payload.message || `Agent 请求失败 (${response.status})`);
+    error.payload = payload;
+    error.status = response.status;
+    throw error;
+  }
+  return payload.data;
+}
+
+async function assistantActionApi(action, pending) {
+  const response = await fetch(`/demo-api/agent-actions/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      platform_user_id: state.role.id,
+      conversation_id: state.assistantBackendConversationId,
+      action_id: pending.action_id,
+      confirmation_token: pending.confirmation_token,
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) {
+    const error = new Error(payload.message || `确认请求失败 (${response.status})`);
+    error.payload = payload;
+    error.status = response.status;
+    throw error;
+  }
+  return payload.data;
+}
+
+function displayValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "object") return JSON.stringify(value, null, 2);
+  return String(value);
+}
+
+const analysisLabels = {
+  count: "采购笔数",
+  average_unit_price: "平均单价",
+  median_unit_price: "中位单价",
+  total_amount: "总金额",
+  requirement_no: "采购编号",
+  building_name: "楼宇",
+  device_name: "设备",
+  brand: "品牌",
+  model: "型号",
+  quantity: "数量",
+  supplier_name: "供应商",
+  actual_unit_price: "实际单价",
+  actual_total_price: "实际总额",
+  status: "状态",
+  created_at: "创建时间",
+};
+
+function renderMetricCards(summary) {
+  const entries = Object.entries(summary || {}).filter(([, value]) => value !== null);
+  if (!entries.length) return "";
+  return `<div class="assistant-metric-grid">${entries
+    .map(
+      ([key, value]) => `<div class="assistant-metric">
+        <span>${escapeHtml(analysisLabels[key] || key)}</span>
+        <strong>${escapeHtml(displayValue(value))}</strong>
+      </div>`,
+    )
+    .join("")}</div>`;
+}
+
+function renderStructuredTable(table) {
+  if (!table?.columns?.length) return "";
+  const rows = (table.rows || []).slice(0, 100);
+  return `
+    <div class="assistant-section">
+      <div class="assistant-section-head"><h3>明细结果</h3><span>共 ${escapeHtml(table.total ?? rows.length)} 条</span></div>
+      <div class="table-wrap assistant-table-wrap">
+        <table>
+          <thead><tr>${table.columns
+            .map((column) => `<th>${escapeHtml(analysisLabels[column] || column)}</th>`)
+            .join("")}</tr></thead>
+          <tbody>${rows
+            .map(
+              (row) => `<tr>${table.columns
+                .map((column) => `<td>${escapeHtml(displayValue(row[column]))}</td>`)
+                .join("")}</tr>`,
+            )
+            .join("")}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderAnalysisResult(analysis) {
+  const query = analysis.effective_query || {};
+  const activeFilters = Object.entries(query).filter(([, value]) => {
+    if (Array.isArray(value)) return value.length;
+    return value !== null && value !== false && value !== "" && value !== 1 && value !== 20;
+  });
+  const groups = analysis.groups || [];
+  return `
+    <div class="assistant-result-summary">
+      <div class="result-title-row">
+        <div><span class="result-kicker">复杂查询</span><h3>${escapeHtml(analysis.answer)}</h3></div>
+        <span class="completion-badge ${analysis.partial_success ? "partial" : "complete"}">${
+          analysis.partial_success ? "部分完成" : "已完成"
+        }</span>
+      </div>
+      ${renderMetricCards(analysis.summary)}
+    </div>
+    <div class="assistant-section">
+      <div class="assistant-section-head"><h3>实际查询口径</h3><span>来自后端确认</span></div>
+      <div class="filter-chips">${activeFilters.length
+        ? activeFilters
+            .map(([key, value]) => `<span><b>${escapeHtml(key)}</b>${escapeHtml(displayValue(value))}</span>`)
+            .join("")
+        : "<span>使用后端默认时间范围和权限范围</span>"}</div>
+    </div>
+    ${groups.length ? `<div class="assistant-section"><div class="assistant-section-head"><h3>分组统计</h3><span>${groups.length} 组</span></div><div class="group-grid">${groups
+      .map((group) => `<div class="group-card"><strong>${escapeHtml(group.label)}</strong>${renderMetricCards(group.metrics)}</div>`)
+      .join("")}</div></div>` : ""}
+    ${renderStructuredTable(analysis.table)}
+    ${(analysis.warnings || []).length ? `<div class="assistant-callout warning"><strong>部分结果不可用</strong>${analysis.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}`;
+}
+
+function renderRiskFacts(item) {
+  const entries = [
+    ["事实", item.facts],
+    ["指标", item.metrics],
+    ["规则阈值", item.applicable_rule],
+  ];
+  return entries
+    .map(
+      ([label, value]) => `<div class="risk-fact"><span>${label}</span><pre>${escapeHtml(displayValue(value))}</pre></div>`,
+    )
+    .join("");
+}
+
+function renderRiskResult(risk) {
+  const evidence = risk.evidence || [];
+  return `
+    <div class="assistant-result-summary">
+      <div class="result-title-row">
+        <div><span class="result-kicker">审批风险调查 · #${risk.requirement_id}</span><h3>${escapeHtml(risk.answer)}</h3></div>
+        <span class="completion-badge ${risk.complete ? "complete" : "partial"}">${risk.complete ? "证据完整" : "信息不完整"}</span>
+      </div>
+      <div class="review-strip ${risk.review.passed ? "passed" : "failed"}">
+        <strong>${risk.review.passed ? "程序证据校验通过" : "程序证据校验未通过"}</strong>
+        <span>已核对 ${risk.review.checked_items} 项风险</span>
+      </div>
+    </div>
+    <div class="risk-card-list">${(risk.summary_items || []).length
+      ? risk.summary_items
+          .map(
+            (item) => `<article class="risk-card">
+              <div class="risk-card-head"><div><span>${escapeHtml(item.risk_code)}</span><h3>${escapeHtml(item.risk_type)}</h3></div><span class="risk-level ${item.risk_level.toLowerCase()}">${escapeHtml(item.risk_level)}</span></div>
+              <div class="risk-fact-grid">${renderRiskFacts(item)}</div>
+              <div class="risk-notes"><div><strong>可能原因（待核实）</strong>${item.possible_causes.map((value) => `<p>${escapeHtml(value)}</p>`).join("")}</div><div><strong>人工核实</strong>${item.human_checks.map((value) => `<p>${escapeHtml(value)}</p>`).join("")}</div></div>
+              ${item.information_gaps.length ? `<div class="assistant-callout warning"><strong>信息缺口</strong>${item.information_gaps.map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</div>` : ""}
+            </article>`,
+          )
+          .join("")
+      : '<div class="assistant-callout neutral"><strong>固定规则未命中</strong><span>这不代表审批结论，仍需由业务人员判断。</span></div>'}</div>
+    <div class="assistant-section">
+      <div class="assistant-section-head"><h3>调查证据</h3><span>${evidence.length} 项</span></div>
+      <div class="evidence-list">${evidence
+        .map(
+          (item) => `<div class="evidence-row"><span class="evidence-status ${item.status.toLowerCase()}">${escapeHtml(item.status)}</span><div><strong>${escapeHtml(item.kind)}</strong><small>${escapeHtml(item.source)}</small>${item.message ? `<p>${escapeHtml(item.message)}</p>` : ""}</div></div>`,
+        )
+        .join("")}</div>
+    </div>`;
+}
+
+const executionStatusLabels = {
+  COMPLETE: "完整完成",
+  PARTIAL: "部分完成",
+  FAILED: "执行失败",
+  NOT_AVAILABLE: "能力未接入",
+  SUCCESS: "成功",
+  SKIPPED: "未调用",
+  NOT_CONFIGURED: "未配置",
+};
+
+function renderExecutionDetails(execution) {
+  if (!execution) return "";
+  const usage = execution.model_usage || {};
+  const modelLabel = usage.call_count
+    ? `${usage.provider || "模型"} / ${usage.model || "未记录型号"}`
+    : "本次未调用模型";
+  const tokenLabel = usage.total_tokens === null || usage.total_tokens === undefined
+    ? "未产生 Token"
+    : `${usage.total_tokens} Token`;
+  const costLabel = usage.estimated_cost === null || usage.estimated_cost === undefined
+    ? "无可记录费用"
+    : `${usage.estimated_cost} ${usage.currency || ""}`.trim();
+  const planSteps = execution.plan?.steps || [];
+  const review = execution.review;
+  return `
+    <details class="execution-details">
+      <summary>
+        <span><b>执行详情</b><small>Trace ${escapeHtml(execution.trace_id)}</small></span>
+        <span class="execution-summary-metrics">
+          <em>${escapeHtml(execution.route)}</em>
+          <em>${execution.duration_ms} ms</em>
+          <em>${execution.step_count} 步</em>
+        </span>
+      </summary>
+      <div class="execution-body">
+        <div class="component-grid">${(execution.components || [])
+          .map(
+            (item) => `<div class="component-card">
+              <div><strong>${escapeHtml(item.name)}</strong><span class="execution-status ${item.status.toLowerCase()}">${escapeHtml(executionStatusLabels[item.status] || item.status)}</span></div>
+              <p>${escapeHtml(item.detail)}</p>
+            </div>`,
+          )
+          .join("")}</div>
+        <div class="execution-usage">
+          <div><span>模型</span><strong>${escapeHtml(modelLabel)}</strong></div>
+          <div><span>用量</span><strong>${escapeHtml(tokenLabel)}</strong></div>
+          <div><span>费用</span><strong>${escapeHtml(costLabel)}</strong></div>
+          <div><span>会话恢复</span><strong>${execution.restored_from_snapshot ? "来自快照" : "本轮新状态"}</strong></div>
+        </div>
+        ${planSteps.length ? `<section class="execution-section">
+          <h4>执行计划</h4>
+          <div class="execution-plan">${planSteps.map((step) => `<div>
+            <span>${escapeHtml(step.step_id)}</span>
+            <strong>${escapeHtml(step.objective)}</strong>
+            <small>${escapeHtml(step.tool)} · ${escapeHtml(displayValue(step.arguments))}</small>
+          </div>`).join("")}</div>
+        </section>` : ""}
+        <section class="execution-section">
+          <h4>Trace 时间线</h4>
+          <div class="execution-timeline">${(execution.trace_events || []).map((event, index) => `<div>
+            <span>${index + 1}</span>
+            <div><strong>${escapeHtml(event.name)}</strong><small>${escapeHtml(event.event_type)} · ${escapeHtml(event.status)}${event.error_code ? ` · ${escapeHtml(event.error_code)}` : ""}</small></div>
+            <em>${event.duration_ms} ms</em>
+          </div>`).join("")}</div>
+        </section>
+        ${(execution.tools || []).length ? `<section class="execution-section">
+          <h4>工具调用</h4>
+          <div class="execution-tools">${execution.tools.map((tool) => `<div>
+            <div><strong>${escapeHtml(tool.name)}</strong><span class="execution-status ${tool.success ? "success" : "failed"}">${tool.success ? "成功" : escapeHtml(tool.code)}</span></div>
+            <p>${escapeHtml(displayValue(tool.arguments))}</p>
+            <small>${escapeHtml(tool.source)} · ${tool.duration_ms} ms</small>
+          </div>`).join("")}</div>
+        </section>` : ""}
+        ${review ? `<section class="execution-section">
+          <h4>程序 Review</h4>
+          <div class="execution-review ${review.passed ? "passed" : "failed"}">
+            <strong>${review.passed ? "审查通过" : "审查未通过"}</strong>
+            <span>核对 ${review.checked_items} 项，${(review.findings || []).length} 个发现</span>
+            ${(review.findings || []).map((item) => `<p>${escapeHtml(item.code)} · ${escapeHtml(item.message)}</p>`).join("")}
+          </div>
+        </section>` : ""}
+        ${(execution.errors || []).length ? `<section class="execution-section">
+          <h4>受控错误</h4>
+          <div class="execution-errors">${execution.errors.map((error) => `<div><strong>${escapeHtml(error.code)}</strong><span>${escapeHtml(error.message)}</span><small>${escapeHtml(error.source || "—")}</small></div>`).join("")}</div>
+        </section>` : ""}
+      </div>
+    </details>`;
+}
+
+function renderKnowledgeResult(knowledge) {
+  if (!knowledge) return "";
+  const trace = knowledge.trace || {};
+  const citations = knowledge.citations || [];
+  return `
+    <div class="assistant-section knowledge-result">
+      <div class="assistant-section-head"><h3>知识库证据</h3><span>${citations.length} 条引用</span></div>
+      <div class="citation-list">${citations.map((item) => `<article class="citation-card">
+        <strong>[${escapeHtml(item.citation_id)}] ${escapeHtml(item.document_title)}</strong>
+        <span>${escapeHtml((item.section_path || []).join(" / "))}</span>
+        <small>${escapeHtml(item.source_path)} · L${item.source_start_line}-${item.source_end_line} · ${escapeHtml(item.version)}</small>
+      </article>`).join("") || '<div class="assistant-callout warning">本次没有可展示的知识库引用。</div>'}</div>
+      <details class="retrieval-trace"><summary>查看检索 Trace</summary>
+        <div class="trace-query"><b>原问题</b><span>${escapeHtml(trace.original_query || knowledge.original_query)}</span></div>
+        <div class="trace-query"><b>改写问题</b><span>${escapeHtml(trace.rewritten_query || knowledge.rewritten_query)}</span></div>
+        <div class="filter-chips">
+          <span>Dense ${(trace.dense_candidates || []).length}</span>
+          <span>Sparse ${(trace.sparse_candidates || []).length}</span>
+          <span>RRF ${(trace.rrf_candidates || []).length}</span>
+          <span>Rerank ${(trace.rerank_candidates || []).length}</span>
+          <span>Parent ${(trace.parent_lookups || []).filter((item) => item.expanded).length}</span>
+        </div>
+      </details>
+    </div>`;
+}
+
+function renderReview(review) {
+  if (!review) return "";
+  return `<div class="assistant-section"><div class="assistant-section-head"><h3>回答审查</h3><span>${review.passed ? "通过" : "需修订"}</span></div>
+    <div class="review-strip ${review.passed ? "passed" : "failed"}">
+      <strong>${review.passed ? "证据与权限审查通过" : "发现阻断项"}</strong>
+      <span>${review.requires_human_confirmation ? "涉及正式动作，必须人工确认" : "本次无需业务确认"}</span>
+    </div>
+    ${(review.issues || []).map((item) => `<div class="assistant-callout ${item.severity === "BLOCKING" ? "error" : "warning"}"><strong>${escapeHtml(item.code)}</strong><span>${escapeHtml(item.message)}</span></div>`).join("")}</div>`;
+}
+
+function actionDraftReady(pending) {
+  const draft = pending?.draft || {};
+  if (!Number.isInteger(Number(draft.requirement_id)) || Number(draft.expected_version) < 0) return false;
+  if (["SUBMIT_PURCHASE_REQUEST", "APPROVE_PURCHASE_REQUEST", "SUBMIT_WAREHOUSE"].includes(pending.action_type)) return Number.isInteger(Number(draft.assigned_to_employee_id));
+  if (pending.action_type === "REJECT_PURCHASE_REQUEST") return Boolean(String(draft.reason || "").trim());
+  if (["SELECT_FINAL_SUPPLIER", "WRITE_PURCHASE_RESULT", "RECORD_WAREHOUSE"].includes(pending.action_type)) return Boolean(draft.fields && typeof draft.fields === "object");
+  return pending.action_type === "COMPLETE_PURCHASE";
+}
+
+function renderPendingAction(pending) {
+  if (!pending) return "";
+  const ready = actionDraftReady(pending);
+  return `<section class="hitl-card" data-hitl-card data-pending-action="${escapeHtml(JSON.stringify(pending))}">
+    <div><span class="result-kicker">HUMAN CONFIRMATION</span><h3>正式业务动作待确认</h3></div>
+    <p>动作：<strong>${escapeHtml(pending.action_type)}</strong> · 有效期至 ${escapeHtml(formatDate(pending.expires_at))}</p>
+    <pre>${escapeHtml(JSON.stringify(pending.draft, null, 2))}</pre>
+    ${ready ? "" : '<div class="assistant-callout warning"><strong>草稿尚不完整</strong><span>继续对话补齐采购单、版本和动作必填信息后才能确认。</span></div>'}
+    <div class="hitl-actions">
+      <button class="button primary" type="button" data-hitl="confirm" ${ready ? "" : "disabled"}>确认并执行</button>
+      <button class="button secondary" type="button" data-hitl="cancel">取消草稿</button>
+    </div>
+    <small>确认后仍由采购后端执行权限、状态机、幂等和版本校验。</small>
+  </section>`;
+}
+
+function renderAssistantResult(data) {
+  $("#assistant-run-meta").innerHTML = `
+    <span>${escapeHtml(data.route)}</span>
+    <span>${data.tool_call_count} 次工具</span>
+    <span>${data.evidence_count} 项证据</span>`;
+  let primary = `<div class="assistant-callout neutral"><strong>智能协同回答</strong><span>${escapeHtml(data.reply)}</span></div>`;
+  if (data.analysis) primary = renderAnalysisResult(data.analysis);
+  if (data.risk_investigation) primary = renderRiskResult(data.risk_investigation);
+  $("#assistant-result").innerHTML = primary
+    + renderKnowledgeResult(data.knowledge)
+    + renderReview(data.review)
+    + renderPendingAction(data.pending_action)
+    + renderExecutionDetails(data.execution);
+}
+
+async function resolvePendingAction(button) {
+  if (state.assistantBusy) return;
+  const card = button.closest("[data-hitl-card]");
+  const pending = JSON.parse(card.dataset.pendingAction);
+  state.assistantBusy = true;
+  card.querySelectorAll("button").forEach((item) => { item.disabled = true; });
+  try {
+    const result = await assistantActionApi(button.dataset.hitl, pending);
+    card.classList.add("resolved");
+    card.innerHTML = `<strong>动作已处理：${escapeHtml(result.status)}</strong><p>${escapeHtml(displayValue(result.result || "未写入业务数据"))}</p>`;
+    appendAssistantMessage("agent", button.dataset.hitl === "confirm" ? "已按你的确认提交业务后端处理。" : "操作草稿已取消，未执行任何业务写入。");
+    setAssistantStatus("complete", "确认已处理");
+  } finally {
+    state.assistantBusy = false;
+  }
+}
+
+async function sendAssistantMessage(event) {
+  event?.preventDefault();
+  if (state.assistantBusy) return;
+  const input = $("#assistant-input");
+  const message = input.value.trim();
+  if (!message) throw new Error("请输入采购问题");
+  if (!state.assistantConversationId) {
+    state.assistantConversationId = `web:${crypto.randomUUID()}`;
+  }
+  state.assistantBusy = true;
+  $("#assistant-send").disabled = true;
+  appendAssistantMessage("user", message);
+  input.value = "";
+  setAssistantStatus("running", "正在分析");
+  try {
+    const data = await assistantApi(message);
+    state.assistantBackendConversationId = data.conversation_id;
+    appendAssistantMessage("agent", data.reply);
+    renderAssistantResult(data);
+    setAssistantStatus("complete", data.analysis?.partial_success || data.risk_investigation?.complete === false ? "部分完成" : "已完成");
+  } catch (error) {
+    appendAssistantMessage("system", friendlyErrorMessage(error));
+    setAssistantStatus("failed", "执行失败");
+    throw error;
+  } finally {
+    state.assistantBusy = false;
+    $("#assistant-send").disabled = false;
+  }
+}
+
 async function openAgentSession() {
   const action = $("#agent-action").value.trim();
   if (!action) throw new Error("请填写业务动作");
@@ -1380,6 +1820,18 @@ function initializeEvents() {
   $("#timeline").addEventListener("click", (event) => {
     const contact = event.target.closest("[data-contact-log]");
     if (contact) revealTimelineContact(contact).catch(showError);
+  });
+  bind("#assistant-form", "submit", sendAssistantMessage);
+  $("#tab-assistant").addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-hitl]");
+    if (actionButton) {
+      resolvePendingAction(actionButton).catch(showError);
+      return;
+    }
+    const promptButton = event.target.closest("[data-assistant-prompt]");
+    if (!promptButton || state.assistantBusy) return;
+    $("#assistant-input").value = promptButton.dataset.assistantPrompt;
+    $("#assistant-form").requestSubmit();
   });
   bind("#agent-open", "click", openAgentSession);
   bind("#agent-send", "click", sendAgentMessage);

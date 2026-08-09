@@ -9,6 +9,7 @@ from app.models.identity import (
     EmployeeRole,
     Role,
 )
+from app.models.knowledge import KnowledgeDocument, KnowledgeParent
 from app.models.notification import NotificationOutbox
 from app.models.procurement import (
     PurchaseExecution,
@@ -29,6 +30,8 @@ __all__ = [
     "EmployeeBuilding",
     "EmployeeExternalIdentity",
     "EmployeeRole",
+    "KnowledgeDocument",
+    "KnowledgeParent",
     "NotificationOutbox",
     "PurchaseExecution",
     "PurchaseOperationLog",

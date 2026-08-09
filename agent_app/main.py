@@ -1,0 +1,91 @@
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from agent_app.api.router import agent_system_router, agent_v1_router
+from agent_app.clients.procurement_backend import ProcurementBackendClient
+from agent_app.core.config import AgentSettings, get_agent_settings
+from agent_app.core.exceptions import register_agent_exception_handlers
+from agent_app.core.logging import configure_agent_logging
+from agent_app.core.middleware import AgentTraceIdMiddleware
+from agent_app.graph.service import ProcurementGraphService
+from agent_app.hitl.service import HITLService
+from agent_app.models.roles import ModelQueryRewriteProvider, StructuredModelRoles
+from agent_app.rag.models import LocalRAGModels, initialize_local_rag_models
+from agent_app.rag.qdrant import QdrantKnowledgeStore
+from agent_app.rag.retriever import KnowledgeRetriever
+from app.db.session import async_session_factory
+
+
+def create_agent_app(
+    settings: AgentSettings | None = None,
+    procurement_backend_client: ProcurementBackendClient | None = None,
+    graph_service: ProcurementGraphService | None = None,
+    rag_models: LocalRAGModels | None = None,
+    model_roles: StructuredModelRoles | None = None,
+) -> FastAPI:
+    resolved_settings = settings or get_agent_settings()
+    owns_client = procurement_backend_client is None
+    client = procurement_backend_client or ProcurementBackendClient(resolved_settings)
+    resolved_graph_service = graph_service or ProcurementGraphService(resolved_settings)
+    if model_roles is not None and hasattr(resolved_graph_service, "set_model_roles"):
+        resolved_graph_service.set_model_roles(model_roles)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        configure_agent_logging(resolved_settings)
+        qdrant_store: QdrantKnowledgeStore | None = None
+        active_rag_models = rag_models
+        if rag_models is None and resolved_settings.rag_models_configured:
+            active_rag_models = await asyncio.to_thread(
+                initialize_local_rag_models,
+                resolved_settings,
+            )
+            application.state.rag_models = active_rag_models
+        if active_rag_models is not None and hasattr(
+            resolved_graph_service, "set_knowledge_retriever"
+        ):
+            qdrant_store = QdrantKnowledgeStore(resolved_settings)
+            resolved_graph_service.set_knowledge_retriever(
+                KnowledgeRetriever(
+                    settings=resolved_settings,
+                    session_factory=async_session_factory,
+                    model_provider=active_rag_models,
+                    qdrant_store=qdrant_store,
+                    query_rewriter=(
+                        ModelQueryRewriteProvider(model_roles) if model_roles is not None else None
+                    ),
+                )
+            )
+        try:
+            yield
+        finally:
+            if qdrant_store is not None:
+                await qdrant_store.close()
+            if owns_client:
+                await client.aclose()
+
+    application = FastAPI(
+        title=resolved_settings.agent_app_name,
+        version="0.1.0",
+        debug=resolved_settings.agent_debug,
+        lifespan=lifespan,
+    )
+    application.state.agent_settings = resolved_settings
+    application.state.procurement_backend_client = client
+    application.state.graph_service = resolved_graph_service
+    application.state.hitl_service = HITLService(client)
+    application.state.rag_models = rag_models
+    application.add_middleware(AgentTraceIdMiddleware)
+    register_agent_exception_handlers(application)
+    application.include_router(agent_system_router)
+    application.include_router(
+        agent_v1_router,
+        prefix=resolved_settings.agent_api_v1_prefix,
+    )
+    return application
+
+
+app = create_agent_app()

@@ -1,22 +1,22 @@
-name: procurement-agent
+name: procurement-mind
 
 services:
   mysql:
     image: mysql:8.0.44
-    container_name: procurement-agent-mysql
+    container_name: procurement-mind-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-procurement_agent}
-      MYSQL_USER: ${MYSQL_USER:-procurement_agent_app}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-procurement_mind}
+      MYSQL_USER: ${MYSQL_USER:-procurement_mind_app}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
       TZ: Asia/Shanghai
     ports:
-      - "127.0.0.1:3307:3306"
+      - "127.0.0.1:${MYSQL_PORT:-13307}:3306"
     volumes:
-      - procurement-agent-mysql-data:/var/lib/mysql
+      - procurement-mind-mysql-data:/var/lib/mysql
     networks:
-      - procurement-agent-network
+      - procurement-mind-network
     healthcheck:
       test:
         [
@@ -28,11 +28,11 @@ services:
       retries: 30
       start_period: 20s
     labels:
-      com.procurement-agent.resource: "mysql"
+      com.procurement-mind.resource: "mysql"
 
   redis:
     image: redis:7.4-alpine
-    container_name: procurement-agent-redis
+    container_name: procurement-mind-redis
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -46,11 +46,11 @@ services:
         "${REDIS_PASSWORD:?REDIS_PASSWORD is required}",
       ]
     ports:
-      - "127.0.0.1:6380:6379"
+      - "127.0.0.1:${REDIS_PORT:-16380}:6379"
     volumes:
-      - procurement-agent-redis-data:/data
+      - procurement-mind-redis-data:/data
     networks:
-      - procurement-agent-network
+      - procurement-mind-network
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
       interval: 5s
@@ -58,21 +58,216 @@ services:
       retries: 20
       start_period: 5s
     labels:
-      com.procurement-agent.resource: "redis"
+      com.procurement-mind.resource: "redis"
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    container_name: procurement-mind-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - procurement-mind-qdrant-data:/qdrant/storage
+    networks:
+      - procurement-mind-network
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    labels:
+      com.procurement-mind.resource: "qdrant"
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: procurement-mind-app:local
+    container_name: procurement-mind-migrate
+    restart: "no"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-procurement_mind}
+      MYSQL_USER: ${MYSQL_USER:-procurement_mind_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      IDENTITY_GATEWAY_SECRET: ${IDENTITY_GATEWAY_SECRET:?IDENTITY_GATEWAY_SECRET is required}
+      TZ: Asia/Shanghai
+    networks:
+      - procurement-mind-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      com.procurement-mind.resource: "migration"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: procurement-mind-app:local
+    container_name: procurement-mind-backend
+    restart: unless-stopped
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+      ]
+    environment:
+      APP_ENV: development
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-procurement_mind}
+      MYSQL_USER: ${MYSQL_USER:-procurement_mind_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_DB: "0"
+      IDENTITY_GATEWAY_SECRET: ${IDENTITY_GATEWAY_SECRET:?IDENTITY_GATEWAY_SECRET is required}
+      AGENT_SERVICE_URL: http://agent:8100
+      AGENT_SERVICE_TIMEOUT_SECONDS: "130"
+      ANALYTICS_QUERY_TIMEOUT_SECONDS: ${ANALYTICS_QUERY_TIMEOUT_SECONDS:-10}
+      ANALYTICS_MAX_SCAN_ROWS: ${ANALYTICS_MAX_SCAN_ROWS:-5000}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    networks:
+      - procurement-mind-network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    labels:
+      com.procurement-mind.resource: "backend"
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: procurement-mind-app:local
+    container_name: procurement-mind-agent
+    restart: unless-stopped
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "agent_app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8100",
+      ]
+    environment:
+      AGENT_APP_ENV: development
+      AGENT_DEBUG: "false"
+      AGENT_LOG_LEVEL: INFO
+      AGENT_HOST: 0.0.0.0
+      AGENT_PORT: "8100"
+      PROCUREMENT_BACKEND_URL: http://backend:8000
+      PROCUREMENT_BACKEND_TIMEOUT_SECONDS: ${PROCUREMENT_BACKEND_TIMEOUT_SECONDS:-10}
+      PROCUREMENT_BACKEND_MAX_RETRIES: ${PROCUREMENT_BACKEND_MAX_RETRIES:-1}
+      PROCUREMENT_BACKEND_RETRY_DELAY_SECONDS: ${PROCUREMENT_BACKEND_RETRY_DELAY_SECONDS:-0.1}
+      IDENTITY_GATEWAY_SECRET: ${IDENTITY_GATEWAY_SECRET:?IDENTITY_GATEWAY_SECRET is required}
+      MCP_STARTUP_TIMEOUT_SECONDS: ${MCP_STARTUP_TIMEOUT_SECONDS:-60}
+      MCP_TOOL_TIMEOUT_SECONDS: ${MCP_TOOL_TIMEOUT_SECONDS:-15}
+      MCP_CIRCUIT_FAILURE_THRESHOLD: ${MCP_CIRCUIT_FAILURE_THRESHOLD:-3}
+      MCP_CIRCUIT_RECOVERY_TIMEOUT_SECONDS: ${MCP_CIRCUIT_RECOVERY_TIMEOUT_SECONDS:-30}
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-}
+      PRIMARY_MODEL: ${PRIMARY_MODEL:-}
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      MODEL_BASE_URL: ${MODEL_BASE_URL:-}
+      FALLBACK_MODEL: ${FALLBACK_MODEL:-}
+      MODEL_TIMEOUT_SECONDS: ${MODEL_TIMEOUT_SECONDS:-60}
+      MODEL_STRUCTURED_OUTPUT_RETRIES: ${MODEL_STRUCTURED_OUTPUT_RETRIES:-1}
+      MODEL_CIRCUIT_FAILURE_THRESHOLD: ${MODEL_CIRCUIT_FAILURE_THRESHOLD:-3}
+      MODEL_CIRCUIT_RECOVERY_TIMEOUT_SECONDS: ${MODEL_CIRCUIT_RECOVERY_TIMEOUT_SECONDS:-30}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-procurement_knowledge_child}
+      QDRANT_TIMEOUT_SECONDS: ${QDRANT_TIMEOUT_SECONDS:-10}
+      RAG_DENSE_VECTOR_SIZE: ${RAG_DENSE_VECTOR_SIZE:-1024}
+      RAG_DENSE_VECTOR_NAME: ${RAG_DENSE_VECTOR_NAME:-dense}
+      RAG_SPARSE_VECTOR_NAME: ${RAG_SPARSE_VECTOR_NAME:-bm25}
+      MAX_TOOL_CALLS: ${MAX_TOOL_CALLS:-8}
+      MAX_EXECUTION_STEPS: ${MAX_EXECUTION_STEPS:-12}
+      TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-120}
+      REVIEW_ENABLED: ${REVIEW_ENABLED:-true}
+      TRACE_ENABLED: ${TRACE_ENABLED:-true}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:${AGENT_PORT:-8100}:8100"
+    volumes:
+      - procurement-mind-agent-data:/app/.data
+    networks:
+      - procurement-mind-network
+    depends_on:
+      backend:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    labels:
+      com.procurement-mind.resource: "agent"
 
 networks:
-  procurement-agent-network:
-    name: procurement-agent-network
+  procurement-mind-network:
+    name: procurement-mind-network
     driver: bridge
     labels:
-      com.procurement-agent.resource: "network"
+      com.procurement-mind.resource: "network"
 
 volumes:
-  procurement-agent-mysql-data:
-    name: procurement-agent-mysql-data
+  procurement-mind-mysql-data:
+    name: procurement-mind-mysql-data
     labels:
-      com.procurement-agent.resource: "mysql-data"
-  procurement-agent-redis-data:
-    name: procurement-agent-redis-data
+      com.procurement-mind.resource: "mysql-data"
+  procurement-mind-redis-data:
+    name: procurement-mind-redis-data
     labels:
-      com.procurement-agent.resource: "redis-data"
+      com.procurement-mind.resource: "redis-data"
+  procurement-mind-agent-data:
+    name: procurement-mind-agent-data
+    labels:
+      com.procurement-mind.resource: "agent-data"
+  procurement-mind-qdrant-data:
+    name: procurement-mind-qdrant-data
+    labels:
+      com.procurement-mind.resource: "qdrant-data"

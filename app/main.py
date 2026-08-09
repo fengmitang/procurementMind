@@ -9,12 +9,16 @@ from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestIdMiddleware
+from app.db.session import engine
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging()
-    yield
+    try:
+        yield
+    finally:
+        await engine.dispose()
 
 
 settings = get_settings()

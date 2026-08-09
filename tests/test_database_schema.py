@@ -15,6 +15,8 @@ BUSINESS_TABLES = {
     "employee_external_identity",
     "employee_role",
     "notification_outbox",
+    "knowledge_document",
+    "knowledge_parent",
     "purchase_execution",
     "purchase_operation_log",
     "purchase_request",
@@ -73,6 +75,6 @@ async def test_initial_database_schema_and_seed_data() -> None:
 
     assert table_names == BUSINESS_TABLES | {"alembic_version"}
     assert current_user is not None
-    assert current_user.startswith("procurement_agent_app@")
+    assert current_user.startswith("procurement_mind_app@")
     assert roles == EXPECTED_ROLES
     assert buildings == EXPECTED_BUILDINGS

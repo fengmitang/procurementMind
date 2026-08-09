@@ -1,0 +1,26 @@
+{
+  "baseline_version": "rag-retrieval-v0.1",
+  "expected_total_cases": 12,
+  "evaluation_k": 5,
+  "minimum_route_accuracy": 1.0,
+  "minimum_citation_accuracy": 1.0,
+  "minimum_negative_accuracy": 1.0,
+  "strategies": {
+    "dense": {
+      "minimum_recall_at_k": 0.8,
+      "minimum_mrr": 0.9
+    },
+    "sparse": {
+      "minimum_recall_at_k": 0.58,
+      "minimum_mrr": 0.65
+    },
+    "hybrid": {
+      "minimum_recall_at_k": 0.8,
+      "minimum_mrr": 0.75
+    },
+    "hybrid_reranker": {
+      "minimum_recall_at_k": 0.8,
+      "minimum_mrr": 0.9
+    }
+  }
+}

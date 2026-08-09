@@ -1,0 +1,135 @@
+[
+  {
+    "case_id": "direct-rejection-rule",
+    "category": "direct",
+    "query": "采购申请被驳回后的处理规定是什么？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": [
+      "4bf46f2c-f2d5-56a9-b306-b91f29738ade",
+      "cc18dc0e-ed01-5b77-b974-c435071eea8d",
+      "aaa98cae-1388-56e0-9dec-3d46d0f9b505"
+    ]
+  },
+  {
+    "case_id": "colloquial-rejection",
+    "category": "colloquial",
+    "query": "单子被楼长打回来了咋整？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": [
+      "4bf46f2c-f2d5-56a9-b306-b91f29738ade",
+      "cc18dc0e-ed01-5b77-b974-c435071eea8d",
+      "aaa98cae-1388-56e0-9dec-3d46d0f9b505"
+    ]
+  },
+  {
+    "case_id": "synonym-device-name",
+    "category": "synonym",
+    "query": "买设备时品名应该怎么写？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["2b6c1463-5e97-55d7-88ad-34609a33c920"]
+  },
+  {
+    "case_id": "multi-field-question",
+    "category": "multi-clause",
+    "query": "设备名称和采购数量分别应该怎样填写？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": [
+      "2b6c1463-5e97-55d7-88ad-34609a33c920",
+      "af74cb36-ce47-5675-8a66-34e18ce0ba81"
+    ]
+  },
+  {
+    "case_id": "faq-incomplete-draft",
+    "category": "faq",
+    "query": "草稿没填完还能先保存吗？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["5c797e0f-ff73-5b6b-82ab-291ee7ad8a4d"]
+  },
+  {
+    "case_id": "permission-auto-approval",
+    "category": "permission",
+    "query": "智能助手能否替用户自动审批？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": [
+      "31d32b19-7b64-540c-a2c3-b89cb4341af3",
+      "a066a0e9-e3e7-5036-a8fd-fa8d089cd13b"
+    ]
+  },
+  {
+    "case_id": "negative-annual-leave",
+    "category": "negative",
+    "query": "公司的年假应该怎么申请？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": []
+  },
+  {
+    "case_id": "realtime-request-status",
+    "category": "realtime",
+    "query": "采购申请 91007 当前状态是什么？",
+    "roles": ["APPLICANT"],
+    "expected_route": "REALTIME_BUSINESS",
+    "expected_retrieval": false,
+    "relevant_parent_ids": []
+  },
+  {
+    "case_id": "hybrid-cannot-submit",
+    "category": "hybrid",
+    "query": "为什么采购申请 91007 当前不能提交？",
+    "roles": ["APPLICANT"],
+    "expected_route": "HYBRID",
+    "expected_retrieval": true,
+    "relevant_parent_ids": [
+      "27f76cf5-eb9b-5d7a-bb41-34112544fe33",
+      "f6aaa2fd-f4b9-5c88-bed3-5bae4a94004e"
+    ]
+  },
+  {
+    "case_id": "faq-blacklist-types",
+    "category": "faq",
+    "query": "永久黑名单和限时黑名单有什么区别？",
+    "roles": ["PURCHASER"],
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_retrieval": true,
+    "relevant_parent_ids": [
+      "b0b6fb6b-d33a-5861-9477-c6333fbb6a25",
+      "4a2fdaa3-ace0-51ef-99d7-05f60a0cbe80",
+      "81a99317-3456-5263-a664-c55886ca82d9"
+    ]
+  },
+  {
+    "case_id": "permission-blacklist-register",
+    "category": "permission",
+    "query": "谁可以登记供应商黑名单？",
+    "roles": ["APPLICANT"],
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["13c6d8bb-3fca-5548-89ac-1074eb3731a2"]
+  },
+  {
+    "case_id": "mixed-risk-and-rule",
+    "category": "rag-tool-mixed",
+    "query": "采购申请 91009 当前涉及哪些黑名单风险，制度要求核实什么？",
+    "roles": ["BUILDING_MANAGER"],
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_retrieval": true,
+    "relevant_parent_ids": [
+      "151c2c09-a2f4-5ad2-973e-729ee660696a",
+      "3f660b12-36ef-511c-ad1d-7dd47eddc0e1",
+      "d52f23a7-3bce-51da-8c05-6aa04a920a61"
+    ]
+  }
+]

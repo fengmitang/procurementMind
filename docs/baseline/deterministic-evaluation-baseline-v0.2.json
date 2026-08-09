@@ -1,0 +1,10 @@
+{
+  "baseline_version": "deterministic-v0.2",
+  "mode": "DETERMINISTIC",
+  "suites": {
+    "router": {"expected_total": 10, "minimum_pass_rate": 1.0, "maximum_failed": 0, "expected_status": "PASSED"},
+    "tool-security": {"expected_total": 8, "minimum_pass_rate": 1.0, "maximum_failed": 0, "expected_status": "PASSED"},
+    "analysis-planner": {"expected_total": 4, "minimum_pass_rate": 1.0, "maximum_failed": 0, "expected_status": "PASSED"},
+    "risk-contract": {"expected_total": 3, "minimum_pass_rate": 1.0, "maximum_failed": 0, "expected_status": "PASSED"}
+  }
+}

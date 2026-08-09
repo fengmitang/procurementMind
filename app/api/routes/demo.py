@@ -3,17 +3,121 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, HTTPError
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.core.gateway_auth import build_gateway_signature
-from app.schemas.demo import DemoProxyRequest
+from app.core.request_context import request_id_context
+from app.schemas.demo import DemoAgentActionRequest, DemoAgentChatRequest, DemoProxyRequest
 
 router = APIRouter(prefix="/demo-api", tags=["development-demo"])
 
 ALLOWED_METHODS = {"GET", "POST", "PUT", "PATCH"}
 ALLOWED_TEST_USERS = {f"test-user-{index:02d}" for index in range(1, 9)}
+
+
+async def forward_agent_chat(
+    payload: DemoAgentChatRequest,
+    trace_id: str,
+) -> tuple[int, dict]:
+    settings = get_settings()
+    try:
+        async with AsyncClient(
+            base_url=settings.agent_service_url.rstrip("/"),
+            timeout=settings.agent_service_timeout_seconds,
+        ) as client:
+            response = await client.post(
+                "/api/v1/chat",
+                headers={"X-Request-Id": trace_id},
+                json={
+                    "platform_type": "TEST_PLATFORM",
+                    "platform_user_id": payload.platform_user_id,
+                    "message": payload.message,
+                    "external_conversation_id": payload.external_conversation_id,
+                    "external_message_id": payload.external_message_id,
+                },
+            )
+    except HTTPError as exc:
+        raise AppError(
+            "AGENT_SERVICE_UNAVAILABLE",
+            "Agent 服务暂时不可用，请确认 8100 服务已启动",
+            503,
+        ) from exc
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise AppError(
+            "AGENT_SERVICE_PROTOCOL_ERROR",
+            "Agent 服务返回了无效响应",
+            502,
+        ) from exc
+    if not isinstance(body, dict):
+        raise AppError(
+            "AGENT_SERVICE_PROTOCOL_ERROR",
+            "Agent 服务返回了无效响应",
+            502,
+        )
+    return response.status_code, body
+
+
+async def forward_agent_action(
+    payload: DemoAgentActionRequest,
+    action: str,
+    trace_id: str,
+) -> tuple[int, dict]:
+    settings = get_settings()
+    try:
+        async with AsyncClient(
+            base_url=settings.agent_service_url.rstrip("/"),
+            timeout=settings.agent_service_timeout_seconds,
+        ) as client:
+            response = await client.post(
+                f"/api/v1/chat/actions/{action}",
+                headers={"X-Request-Id": trace_id},
+                json={
+                    "platform_type": "TEST_PLATFORM",
+                    "platform_user_id": payload.platform_user_id,
+                    "conversation_id": payload.conversation_id,
+                    "action_id": payload.action_id,
+                    "confirmation_token": payload.confirmation_token,
+                },
+            )
+    except HTTPError as exc:
+        raise AppError("AGENT_SERVICE_UNAVAILABLE", "Agent 服务暂时不可用", 503) from exc
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise AppError("AGENT_SERVICE_PROTOCOL_ERROR", "Agent 服务返回了无效响应", 502) from exc
+    if not isinstance(body, dict):
+        raise AppError("AGENT_SERVICE_PROTOCOL_ERROR", "Agent 服务返回了无效响应", 502)
+    return response.status_code, body
+
+
+@router.post("/agent-chat", include_in_schema=False)
+async def demo_agent_chat(payload: DemoAgentChatRequest) -> JSONResponse:
+    settings = get_settings()
+    if settings.app_env.lower() != "development":
+        raise AppError("NOT_FOUND", "页面不存在", 404)
+    if payload.platform_user_id not in ALLOWED_TEST_USERS:
+        raise AppError("DEMO_USER_NOT_ALLOWED", "体验界面只允许 TEST 测试用户", 403)
+    trace_id = request_id_context.get() or str(uuid4())
+    status_code, body = await forward_agent_chat(payload, trace_id)
+    return JSONResponse(status_code=status_code, content=body)
+
+
+@router.post("/agent-actions/{action}", include_in_schema=False)
+async def demo_agent_action(action: str, payload: DemoAgentActionRequest) -> JSONResponse:
+    settings = get_settings()
+    if settings.app_env.lower() != "development":
+        raise AppError("NOT_FOUND", "页面不存在", 404)
+    if action not in {"confirm", "cancel"}:
+        raise AppError("DEMO_ACTION_NOT_ALLOWED", "体验界面不允许该确认动作", 404)
+    if payload.platform_user_id not in ALLOWED_TEST_USERS:
+        raise AppError("DEMO_USER_NOT_ALLOWED", "体验界面只允许 TEST 测试用户", 403)
+    trace_id = request_id_context.get() or str(uuid4())
+    status_code, body = await forward_agent_action(payload, action, trace_id)
+    return JSONResponse(status_code=status_code, content=body)
 
 
 @router.post("/proxy", include_in_schema=False)

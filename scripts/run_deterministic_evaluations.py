@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-DEFAULT_BASELINE = ROOT / "docs" / "baseline" / "deterministic-evaluation-baseline-v0.1.json"
+DEFAULT_BASELINE = ROOT / "docs" / "baseline" / "deterministic-evaluation-baseline-v0.2.json"
 
 
 async def main() -> int:
@@ -34,10 +34,7 @@ async def main() -> int:
         analysis_cases=cases.analysis,
         risk_cases=cases.risk,
     )
-    report = build_unified_report(
-        reports,
-        blocked_suites={"rag-quality": "等待真实采购制度材料，未生成虚构知识质量结果"},
-    )
+    report = build_unified_report(reports)
     baseline = EvaluationBaseline.model_validate_json(args.baseline.read_text(encoding="utf-8"))
     comparison = compare_with_baseline(report, baseline)
     payload = {

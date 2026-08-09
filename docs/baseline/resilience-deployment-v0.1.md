@@ -59,5 +59,6 @@ docker compose --env-file .env.docker stop backend agent
 
 - 未配置真实模型，因此未执行供应商模型质量、真实 Token 和费用验收。
 - 未提供真实知识材料，因此 RAG、知识引用和知识注入的真实模型评测保持阻塞。
-- Chroma 仅预留 Agent 独立数据卷和配置位置；实际索引代码完成前不启动独立服务。
+- 本条已由 2026-08-07 的阶段 13 决策替代：不使用 Chroma，改为单节点持久化 Qdrant；
+  当前部署和 collection 契约以任务清单 V1.2 与 README 为准。
 - 未推送镜像、未部署外部环境、未执行生产发布。

@@ -277,7 +277,12 @@ async def test_risk_investigation_graph_returns_structured_evidence() -> None:
     assert result.risk_investigation.review.passed is True
     assert result.tool_call_count == 5
     assert len(result.evidence) == 6
-    assert result.trace_events[-2].name == "risk_investigation"
+    assert any(item.name == "risk_investigation" for item in result.trace_events)
+    assert [item.name for item in result.trace_events[-3:]] == [
+        "review",
+        "confirmation",
+        "finalize",
+    ]
     assert "确定性风险" in result.reply
 
 

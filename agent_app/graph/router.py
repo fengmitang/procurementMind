@@ -17,16 +17,22 @@ _COMPLEX_TERMS = (
 )
 _KNOWLEDGE_TERMS = ("制度", "流程", "规定", "规范", "如何", "为什么", "能否", "标准")
 _REALTIME_TERMS = (
-    "采购单",
-    "采购申请",
-    "需求单",
     "当前状态",
+    "采购单状态",
+    "采购申请状态",
+    "需求单状态",
     "处理人",
     "经办人",
     "到哪一步",
     "进度",
     "历史采购",
     "推荐供应商",
+)
+_FORM_PREFILL_TERMS = (
+    "预填采购申请",
+    "填写采购申请",
+    "生成采购申请草稿",
+    "采购申请草稿",
 )
 
 
@@ -36,11 +42,14 @@ class FirstVersionRouter:
     def classify(self, message: str) -> RouteType:
         normalized = re.sub(r"\s+", "", message.lower())
         has_risk = any(term in normalized for term in _RISK_TERMS)
+        has_form_prefill = any(term in normalized for term in _FORM_PREFILL_TERMS)
         has_complex = any(term in normalized for term in _COMPLEX_TERMS)
         has_knowledge = any(term in normalized for term in _KNOWLEDGE_TERMS)
         has_realtime = any(term in normalized for term in _REALTIME_TERMS) or bool(
             self.extract_requirement_id(message)
         )
+        if has_form_prefill:
+            return RouteType.FORM_PREFILL
         if has_complex and any(marker in normalized for marker in ("排除黑名单", "剔除黑名单")):
             return RouteType.COMPLEX_QUERY
         if has_risk:

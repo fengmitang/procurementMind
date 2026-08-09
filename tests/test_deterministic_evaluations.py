@@ -24,12 +24,9 @@ async def test_unified_deterministic_report_matches_explicit_baseline() -> None:
         analysis_cases=cases.analysis,
         risk_cases=cases.risk,
     )
-    report = build_unified_report(
-        reports,
-        blocked_suites={"rag-quality": "等待真实采购制度材料"},
-    )
+    report = build_unified_report(reports)
     baseline = EvaluationBaseline.model_validate_json(
-        (ROOT / "docs" / "baseline" / "deterministic-evaluation-baseline-v0.1.json").read_text(
+        (ROOT / "docs" / "baseline" / "deterministic-evaluation-baseline-v0.2.json").read_text(
             encoding="utf-8"
         )
     )
@@ -38,7 +35,7 @@ async def test_unified_deterministic_report_matches_explicit_baseline() -> None:
     assert report.total == 25
     assert report.passed == 25
     assert report.failed == 0
-    assert report.blocked_suites == 1
+    assert report.blocked_suites == 0
     assert comparison.passed is True
     assert comparison.mismatches == []
 
@@ -52,12 +49,9 @@ async def test_baseline_comparison_reports_regression_without_updating_baseline(
         analysis_cases=cases.analysis,
         risk_cases=cases.risk,
     )
-    report = build_unified_report(
-        reports,
-        blocked_suites={"rag-quality": "等待真实采购制度材料"},
-    )
+    report = build_unified_report(reports)
     baseline = EvaluationBaseline.model_validate_json(
-        (ROOT / "docs" / "baseline" / "deterministic-evaluation-baseline-v0.1.json").read_text(
+        (ROOT / "docs" / "baseline" / "deterministic-evaluation-baseline-v0.2.json").read_text(
             encoding="utf-8"
         )
     )

@@ -1,3 +1,5 @@
+import secrets
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import TypedDict
 from uuid import UUID
@@ -6,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from agent_app.analysis.schemas import AnalysisOutput
 from agent_app.investigation.schemas import RiskInvestigationOutput
+from agent_app.models.role_schemas import ReviewOutput
+from agent_app.rag.schemas import RetrievalResult
 from agent_app.schemas.backend import (
     BackendIdentity,
     ConversationStateData,
@@ -19,6 +23,7 @@ class RouteType(StrEnum):
     HYBRID = "HYBRID"
     COMPLEX_QUERY = "COMPLEX_QUERY"
     RISK_INVESTIGATION = "RISK_INVESTIGATION"
+    FORM_PREFILL = "FORM_PREFILL"
 
 
 class TraceEventType(StrEnum):
@@ -102,6 +107,37 @@ class GraphRunResult(BaseModel):
     trace_events: list[TraceEvent]
     analysis: AnalysisOutput | None = None
     risk_investigation: RiskInvestigationOutput | None = None
+    knowledge: RetrievalResult | None = None
+    review: ReviewOutput | None = None
+    evidence_sufficient: bool = False
+    pending_action: "PendingAction | None" = None
+
+
+class HITLActionType(StrEnum):
+    SUBMIT_PURCHASE_REQUEST = "SUBMIT_PURCHASE_REQUEST"
+    APPROVE_PURCHASE_REQUEST = "APPROVE_PURCHASE_REQUEST"
+    REJECT_PURCHASE_REQUEST = "REJECT_PURCHASE_REQUEST"
+    SELECT_FINAL_SUPPLIER = "SELECT_FINAL_SUPPLIER"
+    WRITE_PURCHASE_RESULT = "WRITE_PURCHASE_RESULT"
+    SUBMIT_WAREHOUSE = "SUBMIT_WAREHOUSE"
+    RECORD_WAREHOUSE = "RECORD_WAREHOUSE"
+    COMPLETE_PURCHASE = "COMPLETE_PURCHASE"
+
+
+class PendingAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action_id: str = Field(
+        default_factory=lambda: secrets.token_hex(16), min_length=16, max_length=64
+    )
+    confirmation_token: str = Field(
+        default_factory=lambda: secrets.token_urlsafe(24), min_length=24, max_length=128
+    )
+    action_type: HITLActionType
+    draft: dict[str, JsonValue]
+    requires_confirmation: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    expires_at: datetime = Field(default_factory=lambda: datetime.now(UTC) + timedelta(minutes=15))
 
 
 class GraphState(TypedDict, total=False):
@@ -124,3 +160,8 @@ class GraphState(TypedDict, total=False):
     analysis_query_context: dict[str, JsonValue] | None
     analysis: dict[str, JsonValue] | None
     risk_investigation: dict[str, JsonValue] | None
+    knowledge: dict[str, JsonValue] | None
+    review: dict[str, JsonValue] | None
+    evidence_sufficient: bool
+    pending_action: dict[str, JsonValue] | None
+    compose_output: dict[str, JsonValue] | None

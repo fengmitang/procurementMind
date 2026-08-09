@@ -9,6 +9,7 @@ from agent_app.models.protocols import (
     StructuredModelRequest,
     StructuredModelResponse,
 )
+from agent_app.models.usage import ModelUsageLedger
 from agent_app.resilience import AsyncCircuitBreaker, CircuitOpenError
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
@@ -38,10 +39,12 @@ class StructuredModelRunner:
         timeout_seconds: float,
         max_retries: int,
         circuit_breaker: AsyncCircuitBreaker | None = None,
+        usage_ledger: ModelUsageLedger | None = None,
     ) -> None:
         self.adapter = adapter
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
+        self.usage_ledger = usage_ledger
         self.circuit_breaker = circuit_breaker or AsyncCircuitBreaker(
             failure_threshold=3,
             recovery_timeout_seconds=30,
@@ -52,6 +55,14 @@ class StructuredModelRunner:
         request: StructuredModelRequest,
         output_type: type[OutputT],
     ) -> tuple[OutputT, StructuredModelResponse, int]:
+        expected_schema = output_type.model_json_schema(mode="serialization")
+        if request.response_schema != expected_schema:
+            raise StructuredModelRunError(
+                "MODEL_RESPONSE_SCHEMA_MISMATCH",
+                "请求声明的结构化 Schema 与输出类型不一致",
+                attempts=0,
+                retryable=False,
+            )
         attempts = 1 + self.max_retries
         last_error: StructuredModelRunError | None = None
         for attempt in range(1, attempts + 1):
@@ -101,6 +112,8 @@ class StructuredModelRunner:
                         retryable=True,
                     )
                 else:
+                    if self.usage_ledger is not None:
+                        self.usage_ledger.record(request.purpose, response, attempt)
                     return parsed, response, attempt
             if last_error and (
                 last_error.code == "MODEL_CIRCUIT_OPEN"

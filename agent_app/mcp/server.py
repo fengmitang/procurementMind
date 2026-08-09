@@ -5,6 +5,7 @@ from typing import Annotated
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
+from agent_app.mcp.catalog import tool_registration
 from agent_app.mcp.runtime import MCPRuntime
 from agent_app.mcp.schemas import MCPToolResponse
 from agent_app.mcp.tools import ProcurementTools
@@ -46,25 +47,25 @@ LimitedText = Annotated[str, Field(min_length=1, max_length=200)]
 ResultLimit = Annotated[int, Field(ge=1, le=30)]
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("get_current_user"))
 async def get_current_user() -> MCPToolResponse:
     """读取当前可信平台用户、角色和可访问楼宇；不接受身份参数。"""
     return await _tools().get_current_user()
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("get_purchase_request"))
 async def get_purchase_request(requirement_id: PositiveId) -> MCPToolResponse:
     """读取当前用户有权查看的采购申请详情，保留后端脱敏结果。"""
     return await _tools().get_purchase_request(requirement_id)
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("get_purchase_timeline"))
 async def get_purchase_timeline(requirement_id: PositiveId) -> MCPToolResponse:
     """读取采购申请时间线；联系方式默认使用后端脱敏值。"""
     return await _tools().get_purchase_timeline(requirement_id)
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("search_purchase_records"))
 async def search_purchase_records(
     requirement_no: LimitedText | None = None,
     supplier_id: PositiveId | None = None,
@@ -92,7 +93,7 @@ async def search_purchase_records(
     )
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("recommend_products"))
 async def recommend_products(
     device_name: LimitedText,
     device_profession: LimitedText | None = None,
@@ -108,7 +109,7 @@ async def recommend_products(
     )
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("recommend_purchase_history"))
 async def recommend_purchase_history(
     requirement_id: PositiveId,
     limit: ResultLimit = 10,
@@ -120,7 +121,7 @@ async def recommend_purchase_history(
     )
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("recommend_suppliers"))
 async def recommend_suppliers(
     requirement_id: PositiveId,
     limit: ResultLimit = 10,
@@ -132,13 +133,13 @@ async def recommend_suppliers(
     )
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("query_purchase_analytics"))
 async def query_purchase_analytics(query: AnalyticsQueryInput) -> MCPToolResponse:
     """执行白名单采购查询和聚合；不接受 SQL 或任意字段。"""
     return await _tools().query_purchase_analytics(query)
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("get_requirement_risk_signals"))
 async def get_requirement_risk_signals(
     requirement_id: PositiveId,
 ) -> MCPToolResponse:
@@ -146,7 +147,7 @@ async def get_requirement_risk_signals(
     return await _tools().get_requirement_risk_signals(requirement_id)
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("get_similar_cases"))
 async def get_similar_cases(
     requirement_id: PositiveId,
     limit: Annotated[int, Field(ge=1, le=20)] = 10,
@@ -155,7 +156,7 @@ async def get_similar_cases(
     return await _tools().get_similar_cases(requirement_id, limit=limit)
 
 
-@mcp.tool()
+@mcp.tool(**tool_registration("get_supplier_performance"))
 async def get_supplier_performance(
     supplier_id: PositiveId,
     created_from: date | None = None,

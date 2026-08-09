@@ -124,5 +124,9 @@ async def chat(
             ),
             analysis=graph_result.analysis,
             risk_investigation=graph_result.risk_investigation,
+            knowledge=graph_result.knowledge,
+            review=graph_result.review,
+            evidence_sufficient=graph_result.evidence_sufficient,
+            pending_action=graph_result.pending_action,
         ),
     )

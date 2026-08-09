@@ -1,7 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,7 +38,30 @@ class AgentSettings(BaseSettings):
     model_base_url: str | None = None
     primary_model: str | None = None
     fallback_model: str | None = None
-    embedding_model: str | None = None
+    embedding_model_path: Path | None = None
+    reranker_model_path: Path | None = None
+    rag_model_device: Literal["auto", "cpu", "cuda"] = "auto"
+    qdrant_url: str = "http://127.0.0.1:6333"
+    qdrant_collection: str = "procurement_knowledge_child"
+    qdrant_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    rag_dense_vector_size: int = Field(default=1024, gt=0, le=65536)
+    rag_dense_vector_name: str = "dense"
+    rag_sparse_vector_name: str = "bm25"
+    knowledge_source_directory: Path = Path("knowledge/source")
+    rag_child_max_chars: int = Field(default=800, ge=100, le=10000)
+    rag_child_hard_max_chars: int = Field(default=2000, ge=100, le=20000)
+    rag_embedding_batch_size: int = Field(default=4, ge=1, le=128)
+    rag_embedding_max_length: int = Field(default=512, ge=64, le=8192)
+    qdrant_upsert_batch_size: int = Field(default=32, ge=1, le=256)
+    rag_dense_top_k: int = Field(default=15, ge=1, le=100)
+    rag_sparse_top_k: int = Field(default=15, ge=1, le=100)
+    rag_fusion_top_k: int = Field(default=12, ge=1, le=100)
+    rag_rerank_top_k: int = Field(default=5, ge=1, le=50)
+    rag_rrf_k: int = Field(default=60, ge=1, le=1000)
+    rag_reranker_batch_size: int = Field(default=4, ge=1, le=128)
+    rag_rerank_min_score: float = Field(default=0.2, ge=0, le=1)
+    rag_context_max_chars: int = Field(default=6000, ge=500, le=50000)
+    rag_parent_max_chars: int = Field(default=2400, ge=200, le=20000)
     model_timeout_seconds: float = Field(default=60.0, gt=0, le=600)
     model_structured_output_retries: int = Field(default=1, ge=0, le=3)
     model_circuit_failure_threshold: int = Field(default=3, ge=1, le=20)
@@ -63,7 +87,10 @@ class AgentSettings(BaseSettings):
         "model_base_url",
         "primary_model",
         "fallback_model",
-        "embedding_model",
+        "qdrant_url",
+        "qdrant_collection",
+        "rag_dense_vector_name",
+        "rag_sparse_vector_name",
         mode="before",
     )
     @classmethod
@@ -82,6 +109,22 @@ class AgentSettings(BaseSettings):
     @property
     def model_configured(self) -> bool:
         return bool(self.model_provider and self.primary_model and self.model_api_key)
+
+    @property
+    def rag_models_configured(self) -> bool:
+        return bool(self.embedding_model_path and self.reranker_model_path)
+
+    @model_validator(mode="after")
+    def validate_rag_chunk_limits(self) -> "AgentSettings":
+        if self.rag_child_hard_max_chars < self.rag_child_max_chars:
+            raise ValueError("RAG_CHILD_HARD_MAX_CHARS 不能小于 RAG_CHILD_MAX_CHARS")
+        if self.rag_fusion_top_k > self.rag_dense_top_k + self.rag_sparse_top_k:
+            raise ValueError("RAG_FUSION_TOP_K 不能大于 Dense 与 Sparse 候选总数")
+        if self.rag_rerank_top_k > self.rag_fusion_top_k:
+            raise ValueError("RAG_RERANK_TOP_K 不能大于 RAG_FUSION_TOP_K")
+        if self.rag_parent_max_chars > self.rag_context_max_chars:
+            raise ValueError("RAG_PARENT_MAX_CHARS 不能大于 RAG_CONTEXT_MAX_CHARS")
+        return self
 
 
 @lru_cache

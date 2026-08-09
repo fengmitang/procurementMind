@@ -6,7 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from app.api.routes import demo as demo_route
 from app.db.session import engine
 from app.main import app
-from app.schemas.demo import DemoAgentChatRequest
+from app.schemas.demo import DemoAgentActionRequest, DemoAgentChatRequest
 from scripts.seed_demo_data import seed_demo_data
 
 
@@ -203,6 +203,33 @@ async def test_demo_agent_chat_rejects_unknown_user_before_forwarding(
     assert called is False
 
 
+@pytest.mark.asyncio
+async def test_demo_agent_action_forwards_only_confirm_or_cancel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_forward(payload, action: str, trace_id: str) -> tuple[int, dict]:
+        captured.update(payload=payload, action=action, trace_id=trace_id)
+        return 200, {"success": True, "data": {"status": "CANCELED"}}
+
+    monkeypatch.setattr(demo_route, "forward_agent_action", fake_forward)
+    body = {
+        "platform_user_id": "test-user-01",
+        "conversation_id": 41,
+        "action_id": "a" * 32,
+        "confirmation_token": "t" * 32,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/demo-api/agent-actions/cancel", json=body)
+        forbidden = await client.post("/demo-api/agent-actions/execute-anything", json=body)
+
+    assert response.status_code == 200
+    assert forbidden.status_code == 404
+    assert captured["action"] == "cancel"
+    assert isinstance(captured["payload"], DemoAgentActionRequest)
+
+
 def test_frontend_does_not_contain_gateway_credentials() -> None:
     frontend = Path(__file__).resolve().parents[1] / "frontend"
     combined_source = "\n".join(
@@ -212,3 +239,16 @@ def test_frontend_does_not_contain_gateway_credentials() -> None:
     assert "IDENTITY_GATEWAY_SECRET" not in combined_source
     assert "X-Gateway-Signature" not in combined_source
     assert "MODEL_API_KEY" not in combined_source
+
+
+def test_frontend_contains_rag_trace_and_hitl_controls() -> None:
+    frontend = Path(__file__).resolve().parents[1] / "frontend"
+    app_source = (frontend / "app.js").read_text(encoding="utf-8")
+    html_source = (frontend / "index.html").read_text(encoding="utf-8")
+
+    assert "renderKnowledgeResult" in app_source
+    assert "检索 Trace" in app_source
+    assert 'data-hitl="confirm"' in app_source
+    assert 'data-hitl="cancel"' in app_source
+    assert "/demo-api/agent-actions/" in app_source
+    assert "正式动作需人工确认" in html_source

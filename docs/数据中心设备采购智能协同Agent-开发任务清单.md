@@ -1,9 +1,10 @@
 # 数据中心设备采购智能协同 Agent 开发任务清单
 
-> 版本：V1.1  
-> 建立日期：2026-08-04  
-> 当前阶段：M10 Trace 与评测的模型无关部分完成（M5 等待真实知识材料）  
-> 需求与设计基线：需求分析 V2.1，以及技术方案、功能模块划分、系统分析、开发计划 V1.1  
+> 版本：V1.2
+> 建立日期：2026-08-04
+> 最近更新：2026-08-10
+> 当前阶段：阶段 20 Web Agent 交互与 HITL 已完成；等待确认进入阶段 21
+> 需求与设计基线：需求分析 V2.1，以及技术方案、功能模块划分、系统分析、开发计划 V1.1
 > 唯一交付仓库：`fengmitang/procurementMind`
 
 ---
@@ -49,23 +50,22 @@
 3. 记录执行的测试及结果。
 4. 记录遗留问题和风险。
 5. 汇报当前完成位置和下一个无阻塞任务。
-6. 一个开发批次完成后等待用户回复“继续”，再开始下一批次。
+6. 每个 Agent / RAG 阶段完成后汇报并暂停；只有用户回复“继续”才进入下一阶段。
 7. 如果修改需求、边界或优先级，同步指出需要更新的基线文档。
 
 ## 2.4 用户确认门禁
 
-- 执行单位由单个任务 ID 调整为 2.5 节定义的开发批次；批次内按依赖顺序连续开发，不逐项暂停。
-- 开始批次前，先说明批次 ID、包含的任务、范围、影响和验证方式。
-- 批次执行期间持续汇报到达的任务节点，但不要求用户逐项回复“继续”。
-- 批次完成后，必须生成一份批次总结，至少包含：
+- 阶段内按依赖顺序连续开发，不逐项暂停；进入新阶段前必须取得用户“继续”确认。
+- 开始阶段前说明范围、影响和验证方式；阶段执行期间持续汇报重要节点。
+- 阶段完成后，必须生成一份总结，至少包含：
   - 已完成内容。
   - 修改文件。
   - 关键设计决定。
   - 已运行的测试和结果。
   - 尚未完成或存在风险的部分。
-  - 下一批次。
-- 完成批次总结后暂停；只有用户回复“继续”，才进入下一批次。
-- 如果开发中遇到需求冲突、重要技术选择、业务口径、权限扩大、正式写入或破坏性操作，立即暂停并请求用户确认。
+  - 下一阶段。
+- 完成阶段总结后暂停；只有用户回复“继续”，才进入下一阶段。
+- 如果开发中遇到不确定事项、需求冲突、重要技术选择、业务口径、权限扩大、正式写入或破坏性操作，立即暂停并请求用户确认。
 - 普通实现细节、可逆重构、测试修复和已确定边界内的技术选择不单独请求确认。
 - 用户未确认前，不自行选择冲突方案，也不提前实现后续任务。
 
@@ -78,7 +78,7 @@
 | DEV-01 | M1 `AGT-001` 至 `AGT-005`；M2 `CLI-001` 至 `CLI-005` | 独立 Agent 服务骨架、安全后端客户端、会话客户端和完整基础/集成测试 | 无 | `[x]` 2026-08-04 |
 | DEV-02 | M3 `MCP-001` 至 `MCP-007` | 标准 stdio MCP、P0 只读工具、Trace/错误边界和契约测试 | 新增依赖与文档冲突时确认 | `[x]` 2026-08-05 |
 | DEV-03 | M4 `GRF-001` 至 `GRF-004`、`RTR-001`、`MEM-001`、`TRC-001` | 最小 LangGraph 实时业务问答、会话恢复、Trace 和端到端测试 | 模型配置可留空，不阻塞模型无关链路 | `[x]` 2026-08-05 |
-| DEV-04 | M5 `RAG-001` 至 `RAG-006`、`KNW-001` 至 `KNW-003` | 真实知识文档导入、权限检索、引用、知识/混合问答和评测 | 开始前必须确认真实知识材料 | `[!]` 等待知识材料 |
+| DEV-04 | M5 `RAG-000` 至 `RAG-006`、`KNW-001` 至 `KNW-003` | 真实知识文档导入、权限检索、引用、知识/混合问答和评测 | 开始前必须确认真实知识材料 | `[-]` 7 份材料与本地推理模型就绪，完整 RAG 待开发 |
 | DEV-05 | M6 `ANB-001` 至 `ANB-005`、`RSK-001` 至 `RSK-003`、`SUP-001`、`CAS-001` | 查询、统计、风险、履约、案例接口和后端契约 | 实现风险规则前确认延期、部分入库等统计口径 | `[x]` 2026-08-05 |
 | DEV-06 | M7 `MCP-008`、`PLN-001`、`EXE-001` 至 `EXE-002`、`ANA-001` 至 `ANA-004`、`MEM-002` | Analysis Agent、Planner/Executor、连续追问、结构化结果和标准答案评测 | 真实模型联调前确认供应商、模型和密钥 | `[!]` 确定性阶段完成，等待真实模型配置 |
 | DEV-07 | M8 `INV-001` 至 `INV-004`、`REV-001` 至 `REV-003` | 审批风险调查、证据校验、Review 回路和评测 | 发现新增审批业务口径时确认 | `[!]` 确定性阶段完成，等待模型和知识材料 |
@@ -112,7 +112,7 @@
 | M2 | 打通安全后端调用 | 签名客户端、用户上下文、统一错误处理 | `[x]` 2026-08-04 |
 | M3 | 建立标准 MCP 工具层 | stdio MCP Server、Client、首批只读工具 | `[x]` 2026-08-05 |
 | M4 | 完成最小 LangGraph 链路 | Graph State、Router、实时业务问答、状态持久化 | `[x]` 2026-08-05 |
-| M5 | 完成基础 RAG | 文档导入、Metadata、Chroma、引用、Knowledge Agent | `[ ]` |
+| M5 | 完成基础 RAG（历史规划） | 文档导入、Metadata、引用、Knowledge Agent；Chroma 选型已由阶段 13 的 Qdrant 决策替代 | `[-]` 由阶段 12–16 接续 |
 | M6 | 补齐分析型后端接口 | 查询 DSL、风险信号、履约统计、相似案例 | `[x]` 2026-08-05 |
 | M7 | 完成复杂查询分析 | Planner/Executor、多工具调用、连续追问、表格结果 | `[-]` 真实模型验收中 |
 | M8 | 完成审批风险调查 | 风险补查、证据摘要、Review 回路 | `[-]` 确定性调查与程序审查完成 |
@@ -186,10 +186,11 @@
 
 | ID | 任务 | 依赖 | 验收方式 | 状态 |
 |---|---|---|---|---|
-| RAG-001 | 确认并整理真实采购知识文档 | GRF-004 | 不使用虚构制度；文档具有来源和版本 | `[!]` 等待知识材料 |
+| RAG-000 | 配置本地 Embedding 与 Reranker 推理模型 | GRF-004 | 模型位于项目外 F 盘；仅本地加载；真实向量和重排验证通过 | `[x]` 2026-08-07 |
+| RAG-001 | 确认并整理真实采购知识文档 | GRF-004 | 不使用虚构制度；文档具有来源和版本 | `[x]` 2026-08-07，7 份 Markdown 源文件 |
 | RAG-002 | 定义文档 Metadata Schema | RAG-001 | 包含版本、生效时间、角色、设备、权限和过期状态 | `[ ]` |
 | RAG-003 | 实现文档解析、章节切分和原文位置保留 | RAG-002 | Chunk 可追溯到文档和章节 | `[ ]` |
-| RAG-004 | 建立 Chroma 索引和基础向量检索 | RAG-003 | 可重复导入、更新和重建 | `[ ]` |
+| RAG-004 | 建立向量索引和基础向量检索 | RAG-003 | 可重复导入、更新和重建；历史 Chroma 选型已由 Qdrant 替代 | `[ ]` 由阶段 13–15 接续 |
 | RAG-005 | 实现权限过滤和结构化引用 | RAG-004 | 越权、过期文档不进入回答证据 | `[ ]` |
 | KNW-001 | 实现 Knowledge Agent | RAG-005 | 无依据时明确无法确认 | `[ ]` |
 | KNW-002 | 完成纯知识问答场景 | KNW-001 | 回答包含正确文档、版本和章节 | `[ ]` |
@@ -268,7 +269,7 @@
 | RES-002 | 实现熔断和 HALF_OPEN 单探针 | RES-001 | 并发状态转换测试通过 | `[x]` 2026-08-06 |
 | RES-003 | 实现 RAG、工具、模型和 Review 降级 | RES-001 | 不完整分析不会描述为完整结论 | `[!]` 工具/模型/混合链路完成，RAG 待材料 |
 | SEC-001 | 完成 Prompt Injection 和工具权限测试 | RES-003 | 文档内容不能触发越权工具或泄露敏感数据 | `[!]` 确定性边界完成，真实模型注入评测待配置 |
-| DEP-001 | 扩展 Docker Compose | WEB-006, RES-003 | 后端 8000、Agent 8100、stdio MCP、MySQL、Redis、Chroma 可启动 | `[!]` 应用和专属基础设施完成，Chroma 待 RAG 实现 |
+| DEP-001 | 扩展 Docker Compose | WEB-006, RES-003 | 后端 8000、Agent 8100、stdio MCP、MySQL、Redis、Qdrant 可启动 | `[-]` Qdrant 已完成，完整交付验收由阶段 21 接续 |
 | DEP-002 | 增加 Agent 镜像、健康检查和配置示例 | DEP-001 | 非 root 运行；密钥不进入镜像 | `[x]` 2026-08-06 |
 | DEM-001 | 固化知识与业务混合问答演示 | DEP-002 | TEST 数据下重复运行稳定 | `[ ]` |
 | DEM-002 | 固化复杂查询与连续追问演示 | DEP-002 | 结果与标准答案一致 | `[x]` 2026-08-06 |
@@ -340,7 +341,7 @@
 - `[x]` DEV-01：完成 M1/M2。新增独立 Agent 服务、结构化聊天骨架、安全签名后端客户端和会话封装；真实 HTTP 双进程验收通过；全仓 62 项测试、Ruff 和导入边界扫描通过。
 - `[x]` DEV-02：完成 M3。引入官方 MCP Python SDK 1.x，建立标准 stdio Server/Client 和 7 项 P0 只读工具；身份通过可信子进程上下文注入，后端继续执行签名与数据权限校验；覆盖工具发现、非法参数、未知工具、超时、后端错误、Trace 和子进程故障；全仓 71 项测试、Ruff 和 134 个 Python 文件格式检查通过。
 - `[x]` DEV-03：完成 M4。引入官方 LangGraph 1.x，建立五类 Router、结构化 Graph State、步骤/工具边界、实时采购状态链路、会话状态/快照映射和基础 Trace；真实链路已覆盖 Router → Graph → stdio MCP → 采购后端；模型供应商配置保持空白且不影响当前确定性链路；全仓 84 项测试、Ruff 和 143 个 Python 文件格式检查通过。
-- `[!]` DEV-04：真实知识材料尚未提供，保持暂停；收到材料后按原清单返回完成 M5。
+- `[-]` DEV-04：7 份 Markdown 知识源文件已到位并完成阅读；本地 RAG 推理模型已准备完成，完整 M5 尚未开发。
 - `[x]` 按用户确认，在 DEV-04 等待材料期间先执行与其独立的 DEV-05。
 - `[x]` DEV-05：完成 M6。新增白名单查询 DSL、查询/聚合、七类确定性风险信号、供应商履约和可解释相似案例四组只读接口；权限、范围、超时、扫描上限及非法输入边界均由后端执行；扩充稳定异常 TEST 数据并保存 OpenAPI v0.2（39 条路径、43 个操作、118 个 Schema）；全仓 94 项测试、Ruff 和 150 个 Python 文件格式检查通过。
 - `[!]` DEV-06 确定性阶段：新增 4 项分析 MCP 工具（累计 11 项）、结构化 Planner、顺序/并行 Executor、一次计划调整、Analysis Agent、查询条件继承、表格/聚合/候选结构和固定评测集；真实 LangGraph → stdio MCP → 后端 → MySQL 标准答案为 9 笔、均价 1112.50、中位价 950.00、总金额 34350.00；全仓 106 项测试、Ruff 和 157 个 Python 文件格式检查通过。
@@ -351,15 +352,213 @@
 - `[!]` DEV-09A：完成 M10 模型无关部分。聊天响应新增请求级执行详情，统一还原路由、Graph、MCP、计划、Review、错误、步骤和耗时；无模型调用时明确记录 0 次调用且 Token/费用不可用。新增 Router 10 例、工具安全 8 例，并将既有 Planner 4 例和风险契约 3 例汇总为 25/25 的统一报告；RAG 质量明确标记 BLOCKED。建立只读 `deterministic-v0.1` 基线及回归差异检测，运行器不能自动更新基线。Web 可展开查看 5 个组件、Trace、工具和 Review。固定九条统计 TEST 数据的创建时间，长期未入库天数保持动态业务事实。全仓 128 项测试通过，Ruff、181 个 Python 文件格式检查、JavaScript 和真实浏览器验收通过。TRC/EVL 的 RAG 与真实 Token/费用仍等待材料和模型。
 - `[!]` DEV-10A：完成模型无关的容错、安全和部署基础。模型与 MCP 接入独立异步熔断器，覆盖 `CLOSED/OPEN/HALF_OPEN`、并发单探针、恢复失败重开、超时和结构化错误；聊天任务增加总超时，模型、MCP 或混合链路失败时不再把部分结果描述为完整结论。外部知识固定作为不可信证据封装，白名单计划拒绝任意 SQL、身份/Trace 注入和越权工具参数。新增非 root 应用镜像和 MySQL、Redis、迁移、后端、Agent 专属 Compose 编排；容器内 UID 10001，镜像历史无密钥标记，四项长期服务均健康，容器内复杂查询真实链路成功。全仓 146 项测试、Ruff 和 190 个 Python 文件格式检查通过，确定性评测 25/25 且基线无差异，Compose 配置校验通过。验收后仅停止后端和 Agent，专属 MySQL/Redis 与数据卷保留。未启动空壳 Chroma、未推送镜像、未部署外部环境。
 - `[!]` DEV-10B：固化模型无关交付演示和自动验收。新增统一演示报告及命令行脚本；DEM-002 真实容器下验证固定统计标准答案和同会话连续追问，第二轮正确继承日期、专业、品牌分组并新增延期供应商排除；DEM-003 验证 91009 的 4 项风险、5 次工具调用、6 项证据、程序 Review、人工核实项和“不替代人工审批结论”声明。报告结果为 2 PASSED、0 FAILED、1 BLOCKED；DEM-001 因真实知识材料缺失保持阻塞。补齐 README 和演示基线文档；全仓 148 项测试、Ruff 和 193 个 Python 文件格式检查通过，确定性评测 25/25 且基线无差异。未调用真实模型、未推送镜像、未发布服务。
+- `[x]` RAG-000：在 `purchasing-agent` 环境安装 CPU 版 PyTorch、FlagEmbedding、Hugging Face Hub 及兼容的 Transformers；将 `BAAI/bge-m3` 和 `BAAI/bge-reranker-v2-m3` 下载到项目外的 `F:/AIModels`。Embedding/Reranker 使用独立封装，仅从本地路径加载并在服务启动时单例初始化；代码保留 `auto/cpu/cuda` 三种模式，当前机器 `.env` 固定 CPU，显式 CUDA 不可用时直接报错。指定“楼长驳回”样例真实 CPU 验证得到两条 1024 维归一化向量，相关/无关候选分数为 0.888307/0.000080；全仓 161 项测试、Ruff 和 201 个 Python 文件格式检查通过。未实现文档切分、索引、检索或完整 RAG。
+- `[x]` 阶段 13：引入官方 `qdrant-client 1.18.0` 和单节点 `qdrant/qdrant:v1.18.2`；
+  新增独立持久卷、健康检查、Qdrant 配置和幂等初始化脚本。真实 collection 状态为 green，
+  包含 1024 维 Cosine `dense`、IDF `bm25` 以及 child/document/parent/chunk/version/status
+  六项 Payload 索引；不兼容的已有 Schema 会拒绝静默覆盖。新增 MySQL
+  `knowledge_document` / `knowledge_parent`、级联外键、Repository、结构化 Document/Parent/Child
+  Schema 和 Alembic `b4f3a8c29d11`，本地数据库已无损升级到 head。知识专项与数据库测试 8 项
+  通过，全仓 168 项测试通过，Ruff check、208 个 Python 文件格式检查和 Alembic check 通过。
+- `[x]` 阶段 14：新增 7 份 Markdown 元数据及标题层级解析、稳定 Document/Parent/Child ID、
+  语义优先 Parent-Child 切片和完整来源行号；字段、FAQ、风险等完整业务单元不会按机械字符边界
+  拆散。新增索引状态迁移 `c9a17e6d42f0`、按文档 content hash 增量同步、全量重建、已删除源文档
+  退役和失败可重试状态；Child 同时写入本地 BGE-M3 Dense 向量与 Qdrant 原生多语言 BM25 Sparse
+  向量。真实 CPU 全量构建 7 个 Document、284 个 Parent 和 284 个 Child，MySQL/Qdrant 数量一致，
+  所有文档均为 `ACTIVE/READY` 且无索引错误；未变化单文档复跑正确跳过。
+- `[x]` 阶段 15：已实现配置化 Dense/BM25 双路召回、Qdrant Query API 服务端 RRF、本地 BGE
+  Reranker、强制角色与 ACTIVE 状态 Metadata Filter、全局/设备范围过滤、可选 Query Rewrite
+  降级、只读 READY Parent 回查和上下文预算。真实需求人问题已得到 15/15/12/5 级联候选，首条
+  命中系统操作手册“处理驳回申请”，精排分数 `0.996599`；需求人/采购员真实可见 Child 分别为
+  203/284。阶段专项 29 项、全仓 186 项测试通过，Ruff check、217 个 Python 文件格式检查和
+  Alembic check 均通过。
+- `[x]` 阶段 16：新增正式 `K1...Kn` Citation、来源文件/版本/章节/行号映射、无证据拒答阈值，
+  以及包含原 Query、改写、Dense、Sparse、RRF、Rerank、最终证据、Parent 回查和 Citation 的
+  请求级检索 Trace。建立 12 例真实固定集及只读基线，覆盖直接、口语、同义、多条款、FAQ、权限、
+  负例、实时、Hybrid 和 RAG+Tool。真实 Recall@5/MRR：Dense `0.80/0.90`、Sparse
+  `0.5833/0.67`、Hybrid `0.80/0.7833`、Hybrid+Reranker `0.80/0.95`；Route、Citation 和负例
+  准确率均为 `1.0`。同时修复退役集成测试误影响正式知识数据的问题，重建并复验 7/284/284，
+  完整测试后仍保持一致。
 
 ---
 
-# 九、当前下一步
+# 九、Agent / RAG 连续开发阶段（2026-08-07 审计后基线）
+
+本节是阶段 12 起的当前执行基线。M0–M11 的已完成记录全部保留；其中尚未完成的 RAG、
+Knowledge、模型、Web、Trace 和交付事项由下列阶段接续。当前明确决策优先于旧文档：向量库
+固定为单节点持久化 Qdrant，不再实现 Chroma；知识源固定为 `knowledge/source/` 下 7 份独立
+Markdown，不合并成长文档；业务实时事实继续只由采购后端 Tool/MCP 提供。
+
+## 阶段 12：RAG 模型运行基线
+
+- **主要工作**：封装本地 `BAAI/bge-m3` Embedding 与 `BAAI/bge-reranker-v2-m3` Reranker；
+  支持 `cpu/cuda/auto`；模型只从项目外本地路径加载并在进程内复用。
+- **依赖**：`purchasing-agent` Conda 环境；`F:/AIModels` 下两套完整权重。
+- **完成标准**：CPU 生成 1024 维归一化向量；相关候选重排分数显著高于无关候选；缺失模型、
+  不完整目录或不可用 CUDA 明确失败且不联网降级。
+- **测试方式**：`tests/test_rag_local_models.py`、`scripts/verify_rag_models.py`、Pytest 与 Ruff。
+- **当前状态**：`[x]` 2026-08-07；实测维度 1024、范数 `[1.0, 1.0]`、候选分数
+  `0.888307 / 0.000080`。现有未提交实现属于本阶段成果，后续不得重复实现。
+
+## 阶段 13：Qdrant 与知识库数据模型
+
+- **主要工作**：增加单节点 Qdrant Compose 持久化服务；配置官方 Python Client；建立 MySQL
+  `knowledge_document`、`knowledge_parent` 模型、Repository 与迁移；定义稳定 ID、版本、状态、
+  来源、Hash、生效时间和完整 Parent 内容；创建同时包含 1024 维 Dense 与 IDF Sparse/BM25
+  命名向量的 Child collection，以及必要 Payload 索引和健康检查。
+- **依赖**：阶段 12；现有 MySQL/Redis/Compose；Qdrant 当前稳定 Query API。
+- **完成标准**：迁移可升级；模型约束与级联关系正确；Qdrant 数据卷独立且服务健康；Collection
+  Schema 幂等创建；Child Payload 至少包含 `child_id/parent_id/document_id/title/section_path/`
+  `topic/chunk_type/version/status/content`；不引入 Chroma、Cloud 或集群。
+- **测试方式**：模型/迁移/配置/Client 单元测试，Compose 配置校验，Qdrant 真实健康与 Collection
+  契约测试，阶段相关 Pytest、`ruff check`、`ruff format --check`。
+- **当前状态**：`[x]` 2026-08-07；MySQL 迁移、Qdrant 真实容器与 collection 契约、配置、
+  Repository、Schema、专项和全量回归均通过。
+
+## 阶段 14：Markdown 解析、Parent-Child 切片与索引同步
+
+- **主要工作**：逐份解析 7 份 Markdown 的元数据表、标题层级和正文位置；按业务语义生成
+  完整 Parent，并将规则、字段说明、步骤、FAQ、风险核实事项切成可独立回答的 Child；Embedding
+  输入固定包含文档标题、章节路径、主题与正文；实现 `scripts/rebuild_knowledge.py`、单文档增量和
+  全量同步，按 content hash 删除该文档旧 Parent/Child 后原子式重建，不以清库作为正常更新。
+- **依赖**：阶段 13；7 份 Markdown；阶段 12 Embedding。
+- **完成标准**：所有 Parent/Child 可追溯到源文件和标题路径；字段的用途/必填/要求/示例不被
+  无上下文拆散；重复执行幂等；未变化文档跳过；变更文档只替换自身数据；MySQL 与 Qdrant
+  失败时有一致性补偿或可重试状态。
+- **测试方式**：解析/语义边界/稳定 ID/Hash/幂等/增量/全量/失败恢复测试，真实 7 文档构建验收，
+  Pytest 与 Ruff。
+- **当前状态**：`[x]` 2026-08-07；7 份文档真实构建得到 284 个 Parent/284 个 Child，MySQL
+  与 Qdrant 精确计数一致；所有文档为 `ACTIVE/READY` 且无错误。单文档未变更复跑返回
+  `skipped=1`；解析、语义边界、稳定 ID、失败恢复及退役流程均有自动化测试。阶段专项 18 项、
+  全仓 179 项测试通过，Ruff check、214 个 Python 文件格式检查和 Alembic check 均通过。
+
+## 阶段 15：混合检索、RRF、Reranker 与 Parent 回查
+
+- **主要工作**：实现可选 Query Rewrite、Metadata Filter、Dense 与 Sparse/BM25 召回、Qdrant
+  Query API RRF 融合、本地 Reranker 精排、按问题与 chunk type 决定的 Parent 扩展和上下文预算；
+  Dense/Sparse/Fusion/Rerank TopK 全部配置化。
+- **依赖**：阶段 14；阶段 12 模型；阶段 13 Qdrant。
+- **完成标准**：默认约 15+15 召回、10–15 融合、4–6 精排但无业务代码硬编码；状态/版本/权限
+  过滤有效；并非所有 Child 无条件扩展整段 Parent；模型不可用时有明确能力状态，不伪造结果。
+- **测试方式**：Dense/Sparse/RRF/重排/过滤/Parent 扩展/配置边界测试及真实检索冒烟，Pytest 与 Ruff。
+- **当前状态**：`[x]` 2026-08-07；所有 TopK、RRF k、批次与上下文预算均配置化；角色范围
+  必填且只允许 ACTIVE 知识，无设备范围时只匹配全局知识。真实 CPU 链路得到 Dense 15、BM25
+  15、RRF 12、精排 5 条，首条为“处理驳回申请”，分数 `0.996599`，上下文 755 字且未截断；
+  Query Rewrite 未配置时如实使用原 Query。阶段专项 29 项、全仓 186 项测试及 Ruff/Alembic
+  门禁全部通过。
+
+## 阶段 16：RAG 引用、评测与检索 Trace
+
+- **主要工作**：定义 Citation 与证据上下文；保存原 Query、改写 Query、Dense/Sparse 候选、RRF、
+  Rerank、最终证据、Parent 扩展和 Citation Trace；建立覆盖直接问法、口语改写、同义表达、多条款、
+  FAQ、权限、负例、实时问题及 RAG+Tool 混合问题的评测集；比较 Dense、Sparse、Hybrid、
+  Hybrid+Reranker。
+- **依赖**：阶段 15；现有 Trace/评测框架。
+- **完成标准**：实现并报告 Recall@K、MRR、Route Accuracy、Citation Accuracy；回答引用包含文档、
+  版本、章节和稳定证据 ID；无证据时明确无法确认；评测报告可重复运行且不自动篡改基线。
+- **测试方式**：指标单测、固定检索集回归、引用映射与不可见证据测试、Trace 完整性测试、Pytest/Ruff。
+- **当前状态**：`[x]` 2026-08-07；正式 Citation 与完整 Trace 已随检索结果返回并保存到本地评测
+  工件。12 例真实 CPU 评测的 Recall@5/MRR 为 Dense `0.80/0.90`、Sparse `0.5833/0.67`、
+  Hybrid `0.80/0.7833`、Hybrid+Reranker `0.80/0.95`；Route Accuracy、Citation Accuracy、
+  Negative Accuracy 均为 `1.0`，只读 RAG 基线比较无差异。确定性评测 v0.2 为 25/25 且不再
+  错误标记 RAG 阻塞；阶段专项 14 项、全仓 189 项测试通过，Ruff check、220 个 Python 文件
+  格式检查与 Alembic check 均通过。测试后知识数据仍为 7 Document/284 Parent/284 Child。
+
+## 阶段 17：业务 Tool / MCP 层收口
+
+- **主要工作**：审计并按采购、产品、供应商、统计 namespace 收口现有 11 项只读工具；补齐 RAG
+  与实时事实边界、结构化错误和可见性元数据；复杂统计继续使用受控 DSL；正式写操作只生成草稿或
+  确认请求，复用业务 Service/HTTP API，不直接访问数据库。
+- **依赖**：现有 M3/M6/M7；阶段 16 混合证据契约。
+- **完成标准**：无任意 SQL、无 Repository/Session 导入、无模型可控身份/Trace 参数；实时状态、
+  处理人、价格、采购记录、供应商和黑名单全部来自 Tool；RAG 与 Tool 冲突可识别并以业务后端为准。
+- **测试方式**：工具发现/namespace/权限/注入/超时/混合冲突契约与真实后端集成测试、Pytest/Ruff。
+- **当前状态**：`[x]` 2026-08-07；保留既有 11 项工具名称和单进程部署，通过 MCP 元数据完成
+  `procurement/product/supplier/analytics` 逻辑隔离；所有工具继续只调用采购后端 HTTP API，
+  身份与 Trace 仅由可信运行时注入。结果契约新增事实类型、后端权威性、可见性及结构化错误/
+  可重试分类；新增稳定规则与实时事实冲突解析，实时 Tool 缺失时禁止以 RAG 推测。协议、权限、
+  注入、超时、namespace 和冲突测试通过；契约基线见 `docs/baseline/tool-mcp-contract-v0.1.md`。
+
+## 阶段 18：LLM Provider 与结构化输出
+
+- **主要工作**：在现有 Provider 无关网关上补齐面向 Router/Rewrite/Planner/Compose/Review 的结构化
+  Schema、超时、重试、熔断、用量采集和 Fake Provider；真实适配器仅在供应商、模型和 Key 可用后接入。
+- **依赖**：现有 `agent_app/models`；阶段 16/17 输出契约。
+- **完成标准**：无 Key 时全部模型无关路径可测试；Schema 非法输出受控失败；不以估算 Token/费用冒充
+  真实用量；真实调用未执行时不得标记成功。
+- **测试方式**：Fake Provider、结构化校验、超时/错误/重试/熔断/用量测试及 Pytest/Ruff；真实模型
+  质量验收在缺少有效 Key/额度时标记 `[!]`，不阻塞后续确定性开发。
+- **当前状态**：`[x]` 2026-08-07；保留现有 Provider 注册表、Fake Adapter、有限重试和共享熔断，
+  新增 Router/Query Rewrite/Planner/Compose/Review 五类严格 Schema 与统一角色入口；请求 Schema
+  与输出类型不一致、路由能力矛盾、Rewrite 标记矛盾、Review 状态非法及 Citation 越界均受控失败。
+  新增运行时 `NOT_CONFIGURED/PROVIDER_NOT_REGISTERED/READY` 状态，Fake 不会自动进入生产注册表；
+  Token 账本仅接受 `PROVIDER_REPORTED` 的完整 input/output/total，缺失时聚合值保持 `null`。
+  模型专项 22 项、全仓 213 项测试通过，Ruff check 和 229 个 Python 文件格式检查通过；完整契约见
+  `docs/baseline/llm-provider-contract-v0.1.md`。
+- **阻塞验收**：`[!]` 尚未确认真实生成模型供应商、模型、有效 API Key 与额度，因此真实 Provider
+  适配器、线上调用和模型质量验收未执行；未将 Fake 结果冒充真实成功，不阻塞阶段 19 的确定性接入。
+
+## 阶段 19：LangGraph Agent 编排
+
+- **主要工作**：在现有 LangGraph 上形成 `load_context → route → plan/retrieve/tools →
+  sufficiency_check → compose → review → confirmation(按需) → save/finalize`；逻辑角色限定为 Router、
+  Knowledge、Analysis、Review 和轻量 Form Prefill；使用现有 `conversation_id` 作为 thread_id，并复用
+  MySQL/Redis Agent Session，不建立第二套业务状态。
+- **依赖**：阶段 16–18；现有 Graph/Session。
+- **完成标准**：知识、实时、混合、复杂查询、风险和预填均可路由；LangGraph 不替代采购状态机；
+  Review 只审查证据、遗漏、事实/分析边界、越权、可见性、RAG/Tool 冲突和人工确认，不重复确定性规则。
+- **测试方式**：节点/条件边/循环与预算/恢复/混合路径/降级/Review 契约和端到端测试、Pytest/Ruff。
+- **当前状态**：`[x]` 2026-08-07；现有 Graph 已扩展为 `load_context → route → knowledge/
+  realtime/analysis/risk/form_prefill → sufficiency_check → compose → review → confirmation → finalize`。
+  Knowledge 和 Hybrid 正式接入本地 RAG Citation，实时事实仍只来自 MCP；模型角色可接管 Router/
+  Rewrite/Compose/Review，失败时记录受控错误并回退确定性链路。`conversation_id` 已作为 thread_id，
+  不新增 Checkpointer；`pending_action` 和 `awaiting_confirmation` 复用采购后端 Conversation State 与
+  快照。预填只生成草稿，confirmation 明确 `executed=false`。专项 47 项、全仓 218 项测试、Ruff
+  check、231 个 Python 文件格式检查及确定性评测 25/25 通过；真实本地 RAG→Graph 得到 5 条引用、
+  充分性与 Review 均通过。基线见 `docs/baseline/langgraph-orchestration-v0.1.md`。
+- **阻塞验收**：`[!]` 真实 Provider 未配置，因此模型 Router/Rewrite/Compose/Review 的线上质量、
+  用量和费用仍未验收；Fake 只验证节点契约，不影响确定性/RAG/Tool 编排完成状态。
+
+## 阶段 20：Web Agent 交互与 HITL
+
+- **主要工作**：扩展现有 Web 智能协同页展示知识引用、检索 Trace 摘要、混合证据、预填草稿、
+  确认卡片和任务恢复；浏览器只走后端 BFF，不保存身份网关 Secret；平台适配保持解耦。
+- **依赖**：阶段 19；现有 Web/BFF。
+- **完成标准**：提交申请、审批通过/驳回、最终供应商、正式采购结果、入库及其他状态变更均在明确
+  人工确认后由现有后端接口执行；Agent 只能查询、分析、推荐、预填和生成草稿；取消/过期/重复确认安全。
+- **测试方式**：前端交互与可见性测试、身份 Secret 扫描、HITL 状态/幂等/并发/取消测试、真实浏览器
+  冒烟及后端/Agent Pytest、Ruff。
+- **当前状态**：`[x]` 2026-08-09；Web 已展示 Citation、RAG Trace 摘要、Review、混合结果、
+  预填草稿和确认卡片；BFF 仅转发白名单测试身份且浏览器不保存网关 Secret。Agent 新增身份/会话绑定、
+  一次性 Token、15 分钟有效期、确认/取消/过期/重复/并发安全契约，确认后仅通过现有采购后端受控
+  API 执行，处理结果复用 Agent Session 与 MySQL 快照。HITL/BFF/UI 定向 26 项、全量 226 项
+  Pytest、Ruff、格式检查、前端语法及真实浏览器冒烟均通过；契约见
+  `docs/baseline/web-hitl-contract-v0.1.md`。真实 Provider 未配置，不影响本阶段确定性验收。
+
+## 阶段 21：端到端测试、安全、部署与项目交付
+
+- **主要工作**：完成 Qdrant/MySQL/Redis/Backend:8000/Agent:8100 Compose 部署、健康与就绪检查、
+  数据持久化、备份/恢复说明、端到端评测、安全扫描、故障降级、README/设计文档/OpenAPI/验收演示；
+  清理旧 Chroma 配置和陈述；模型权重、`.env` 与密钥不进入 Git。
+- **依赖**：阶段 12–20。
+- **完成标准**：全量测试、Ruff、确定性评测、RAG 评测和三类核心演示通过；Qdrant 重启后索引保留；
+  RAG 与实时事实严格分离；无高风险权限/提示注入/任意 SQL/Secret 泄漏；阻塞的真实模型验收单独列明。
+- **测试方式**：全量 Pytest、`ruff check .`、`ruff format --check .`、Compose config/health、真实 7 文档
+  索引与检索、Web 端到端、故障注入和交付脚本。
+- **当前状态**：`[ ]`。
+
+---
+
+# 十、当前下一步
 
 当前应按批次执行：
 
-1. 当前没有剩余的模型无关 P0 实现批次；下一步进入输入门禁，不再用假数据扩展真实知识或模型质量结论。
-2. 若先提供知识材料，则返回 `DEV-04` 完成 RAG、DEM-001、知识引用、安全评测及对应文档。
-3. 若先确认模型供应商，则继续 `DEV-06/DEV-07/TRC-003` 的适配器、真实规划/Review、Token、费用和质量验收；密钥只填本机 `.env`。
+1. 阶段 20 已完成并验收；等待用户回复“继续”后进入阶段 21。
+2. 阶段 21 将完成 Compose 全栈部署、真实 7 文档索引与检索、Web 端到端、安全与故障降级、
+   评测汇总和最终交付文档。
+3. 阶段 21 最终端到端验收需要配置真实主 LLM Provider；Embedding 与 Reranker 本地模型已具备，
+   但若仍无主 LLM API Key/模型额度，将如实把线上模型相关验收标记为 `[!]`，继续完成其余交付项。
 
-DEV-04 继续等待真实采购制度、流程或历史案例材料；材料到位后返回完成 M5，不使用虚构制度替代。
+当前 7 份 Markdown 作为知识库唯一源文件，Word 文件仅用于阅读、汇报和展示。不得跳过 Metadata、
+权限和可追溯性约束。知识库 MySQL 表由知识同步边界管理；Agent 的业务 Tool/MCP 仍不得直接访问
+采购业务 MySQL 或 Redis。

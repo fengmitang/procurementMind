@@ -14,11 +14,9 @@ def build_execution_details(
     model_name: str | None,
 ) -> ExecutionDetails:
     status = _execution_status(result)
-    review = (
-        result.risk_investigation.review.model_dump(mode="json")
-        if result.risk_investigation
-        else None
-    )
+    review = result.review.model_dump(mode="json") if result.review else None
+    if review is None and result.risk_investigation:
+        review = result.risk_investigation.review.model_dump(mode="json")
     plan = result.analysis.plan.model_dump(mode="json") if result.analysis else None
     return ExecutionDetails(
         trace_id=result.trace_id,
@@ -46,7 +44,9 @@ def build_execution_details(
 def _execution_status(
     result: GraphRunResult,
 ) -> str:
-    if result.route is RouteType.KNOWLEDGE:
+    if result.route is RouteType.KNOWLEDGE and any(
+        error.code == "RAG_NOT_CONFIGURED" for error in result.errors
+    ):
         return "NOT_AVAILABLE"
     has_success = any(item.success for item in result.tool_results)
     if (
@@ -54,6 +54,7 @@ def _execution_status(
         and not has_success
         and result.analysis is None
         and result.risk_investigation is None
+        and result.knowledge is None
     ):
         return "FAILED"
     if (
@@ -84,12 +85,21 @@ def _components(
         )
     review_status = "SKIPPED"
     review_detail = "本次路由不需要 Review"
-    if result.risk_investigation:
+    if result.review:
+        review_status = "SUCCESS" if result.review.passed else "FAILED"
+        review_detail = f"证据审查 {len(result.review.issues)} 项问题"
+    elif result.risk_investigation:
         review_status = "SUCCESS" if result.risk_investigation.review.passed else "FAILED"
         review_detail = f"程序审查 {result.risk_investigation.review.checked_items} 项风险"
-    rag_status = "NOT_CONFIGURED"
-    rag_detail = "真实采购知识材料尚未接入"
-    if result.risk_investigation and result.risk_investigation.knowledge_evidence_available:
+    rag_status = "SKIPPED"
+    rag_detail = "本次路由未使用知识检索"
+    if result.knowledge:
+        rag_status = "SUCCESS" if result.knowledge.answerable else "PARTIAL"
+        rag_detail = f"检索到 {len(result.knowledge.evidences)} 条可见知识证据"
+    elif result.route in {RouteType.KNOWLEDGE, RouteType.HYBRID}:
+        rag_status = "FAILED"
+        rag_detail = "知识检索未返回结果"
+    elif result.risk_investigation and result.risk_investigation.knowledge_evidence_available:
         rag_status = "SUCCESS"
         rag_detail = "已取得制度证据"
     return [

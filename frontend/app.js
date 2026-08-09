@@ -131,6 +131,7 @@ const state = {
   requirement: null,
   requirementDirty: false,
   assistantConversationId: null,
+  assistantBackendConversationId: null,
   assistantBusy: false,
   agentConversationId: null,
 };
@@ -267,6 +268,7 @@ async function switchRole(roleId) {
   state.requirementId = null;
   state.requirementDirty = false;
   state.assistantConversationId = null;
+  state.assistantBackendConversationId = null;
   resetAssistantWorkspace();
   state.agentConversationId = null;
   renderRoleWorkspace();
@@ -1189,7 +1191,7 @@ function resetAssistantWorkspace() {
   messages.innerHTML = `
     <div class="assistant-message system">
       <strong>系统</strong>
-      <p>当前可以执行实时采购查询、复杂统计和确定性风险调查。模型与制度材料尚未配置的能力会明确提示。</p>
+      <p>当前支持制度检索与引用、实时采购查询、混合分析和操作草稿。所有正式业务动作必须由你确认后才会交给采购后端执行。</p>
     </div>`;
   result.innerHTML = `
     <div class="empty-detail assistant-empty">
@@ -1235,6 +1237,27 @@ async function assistantApi(message) {
   }
   if (!response.ok || payload.success === false) {
     const error = new Error(payload.message || `Agent 请求失败 (${response.status})`);
+    error.payload = payload;
+    error.status = response.status;
+    throw error;
+  }
+  return payload.data;
+}
+
+async function assistantActionApi(action, pending) {
+  const response = await fetch(`/demo-api/agent-actions/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      platform_user_id: state.role.id,
+      conversation_id: state.assistantBackendConversationId,
+      action_id: pending.action_id,
+      confirmation_token: pending.confirmation_token,
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) {
+    const error = new Error(payload.message || `确认请求失败 (${response.status})`);
     error.payload = payload;
     error.status = response.status;
     throw error;
@@ -1471,25 +1494,97 @@ function renderExecutionDetails(execution) {
     </details>`;
 }
 
+function renderKnowledgeResult(knowledge) {
+  if (!knowledge) return "";
+  const trace = knowledge.trace || {};
+  const citations = knowledge.citations || [];
+  return `
+    <div class="assistant-section knowledge-result">
+      <div class="assistant-section-head"><h3>知识库证据</h3><span>${citations.length} 条引用</span></div>
+      <div class="citation-list">${citations.map((item) => `<article class="citation-card">
+        <strong>[${escapeHtml(item.citation_id)}] ${escapeHtml(item.document_title)}</strong>
+        <span>${escapeHtml((item.section_path || []).join(" / "))}</span>
+        <small>${escapeHtml(item.source_path)} · L${item.source_start_line}-${item.source_end_line} · ${escapeHtml(item.version)}</small>
+      </article>`).join("") || '<div class="assistant-callout warning">本次没有可展示的知识库引用。</div>'}</div>
+      <details class="retrieval-trace"><summary>查看检索 Trace</summary>
+        <div class="trace-query"><b>原问题</b><span>${escapeHtml(trace.original_query || knowledge.original_query)}</span></div>
+        <div class="trace-query"><b>改写问题</b><span>${escapeHtml(trace.rewritten_query || knowledge.rewritten_query)}</span></div>
+        <div class="filter-chips">
+          <span>Dense ${(trace.dense_candidates || []).length}</span>
+          <span>Sparse ${(trace.sparse_candidates || []).length}</span>
+          <span>RRF ${(trace.rrf_candidates || []).length}</span>
+          <span>Rerank ${(trace.rerank_candidates || []).length}</span>
+          <span>Parent ${(trace.parent_lookups || []).filter((item) => item.expanded).length}</span>
+        </div>
+      </details>
+    </div>`;
+}
+
+function renderReview(review) {
+  if (!review) return "";
+  return `<div class="assistant-section"><div class="assistant-section-head"><h3>回答审查</h3><span>${review.passed ? "通过" : "需修订"}</span></div>
+    <div class="review-strip ${review.passed ? "passed" : "failed"}">
+      <strong>${review.passed ? "证据与权限审查通过" : "发现阻断项"}</strong>
+      <span>${review.requires_human_confirmation ? "涉及正式动作，必须人工确认" : "本次无需业务确认"}</span>
+    </div>
+    ${(review.issues || []).map((item) => `<div class="assistant-callout ${item.severity === "BLOCKING" ? "error" : "warning"}"><strong>${escapeHtml(item.code)}</strong><span>${escapeHtml(item.message)}</span></div>`).join("")}</div>`;
+}
+
+function actionDraftReady(pending) {
+  const draft = pending?.draft || {};
+  if (!Number.isInteger(Number(draft.requirement_id)) || Number(draft.expected_version) < 0) return false;
+  if (["SUBMIT_PURCHASE_REQUEST", "APPROVE_PURCHASE_REQUEST", "SUBMIT_WAREHOUSE"].includes(pending.action_type)) return Number.isInteger(Number(draft.assigned_to_employee_id));
+  if (pending.action_type === "REJECT_PURCHASE_REQUEST") return Boolean(String(draft.reason || "").trim());
+  if (["SELECT_FINAL_SUPPLIER", "WRITE_PURCHASE_RESULT", "RECORD_WAREHOUSE"].includes(pending.action_type)) return Boolean(draft.fields && typeof draft.fields === "object");
+  return pending.action_type === "COMPLETE_PURCHASE";
+}
+
+function renderPendingAction(pending) {
+  if (!pending) return "";
+  const ready = actionDraftReady(pending);
+  return `<section class="hitl-card" data-hitl-card data-pending-action="${escapeHtml(JSON.stringify(pending))}">
+    <div><span class="result-kicker">HUMAN CONFIRMATION</span><h3>正式业务动作待确认</h3></div>
+    <p>动作：<strong>${escapeHtml(pending.action_type)}</strong> · 有效期至 ${escapeHtml(formatDate(pending.expires_at))}</p>
+    <pre>${escapeHtml(JSON.stringify(pending.draft, null, 2))}</pre>
+    ${ready ? "" : '<div class="assistant-callout warning"><strong>草稿尚不完整</strong><span>继续对话补齐采购单、版本和动作必填信息后才能确认。</span></div>'}
+    <div class="hitl-actions">
+      <button class="button primary" type="button" data-hitl="confirm" ${ready ? "" : "disabled"}>确认并执行</button>
+      <button class="button secondary" type="button" data-hitl="cancel">取消草稿</button>
+    </div>
+    <small>确认后仍由采购后端执行权限、状态机、幂等和版本校验。</small>
+  </section>`;
+}
+
 function renderAssistantResult(data) {
   $("#assistant-run-meta").innerHTML = `
     <span>${escapeHtml(data.route)}</span>
     <span>${data.tool_call_count} 次工具</span>
     <span>${data.evidence_count} 项证据</span>`;
-  if (data.analysis) {
-    $("#assistant-result").innerHTML = renderAnalysisResult(data.analysis) + renderExecutionDetails(data.execution);
-    return;
+  let primary = `<div class="assistant-callout neutral"><strong>智能协同回答</strong><span>${escapeHtml(data.reply)}</span></div>`;
+  if (data.analysis) primary = renderAnalysisResult(data.analysis);
+  if (data.risk_investigation) primary = renderRiskResult(data.risk_investigation);
+  $("#assistant-result").innerHTML = primary
+    + renderKnowledgeResult(data.knowledge)
+    + renderReview(data.review)
+    + renderPendingAction(data.pending_action)
+    + renderExecutionDetails(data.execution);
+}
+
+async function resolvePendingAction(button) {
+  if (state.assistantBusy) return;
+  const card = button.closest("[data-hitl-card]");
+  const pending = JSON.parse(card.dataset.pendingAction);
+  state.assistantBusy = true;
+  card.querySelectorAll("button").forEach((item) => { item.disabled = true; });
+  try {
+    const result = await assistantActionApi(button.dataset.hitl, pending);
+    card.classList.add("resolved");
+    card.innerHTML = `<strong>动作已处理：${escapeHtml(result.status)}</strong><p>${escapeHtml(displayValue(result.result || "未写入业务数据"))}</p>`;
+    appendAssistantMessage("agent", button.dataset.hitl === "confirm" ? "已按你的确认提交业务后端处理。" : "操作草稿已取消，未执行任何业务写入。");
+    setAssistantStatus("complete", "确认已处理");
+  } finally {
+    state.assistantBusy = false;
   }
-  if (data.risk_investigation) {
-    $("#assistant-result").innerHTML = renderRiskResult(data.risk_investigation) + renderExecutionDetails(data.execution);
-    return;
-  }
-  const waiting = data.route === "KNOWLEDGE" || data.route === "HYBRID";
-  $("#assistant-result").innerHTML = `
-    <div class="assistant-callout ${waiting ? "warning" : "neutral"}">
-      <strong>${waiting ? "当前能力尚未接入" : "实时业务回答"}</strong>
-      <span>${escapeHtml(data.reply)}</span>
-    </div>${renderExecutionDetails(data.execution)}`;
 }
 
 async function sendAssistantMessage(event) {
@@ -1508,6 +1603,7 @@ async function sendAssistantMessage(event) {
   setAssistantStatus("running", "正在分析");
   try {
     const data = await assistantApi(message);
+    state.assistantBackendConversationId = data.conversation_id;
     appendAssistantMessage("agent", data.reply);
     renderAssistantResult(data);
     setAssistantStatus("complete", data.analysis?.partial_success || data.risk_investigation?.complete === false ? "部分完成" : "已完成");
@@ -1727,6 +1823,11 @@ function initializeEvents() {
   });
   bind("#assistant-form", "submit", sendAssistantMessage);
   $("#tab-assistant").addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-hitl]");
+    if (actionButton) {
+      resolvePendingAction(actionButton).catch(showError);
+      return;
+    }
     const promptButton = event.target.closest("[data-assistant-prompt]");
     if (!promptButton || state.assistantBusy) return;
     $("#assistant-input").value = promptButton.dataset.assistantPrompt;

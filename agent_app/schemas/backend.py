@@ -269,3 +269,10 @@ class ConversationCompletedData(BaseModel):
     conversation_id: int
     status: str
     redis_state_deleted: bool
+
+
+class RequirementMutationData(BaseModel):
+    requirement_id: int
+    status: str
+    version: int
+    current_handler: dict[str, JsonValue] | None = None

@@ -1731,6 +1731,74 @@ td .button {
   overflow-wrap: anywhere;
 }
 
+.citation-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.citation-card {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid #dce8e2;
+  border-radius: 9px;
+  background: #fbfdfc;
+  font-size: 10px;
+}
+
+.citation-card span,
+.citation-card small,
+.hitl-card small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.retrieval-trace {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f4f7f5;
+  font-size: 10px;
+}
+
+.trace-query {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 8px;
+  margin: 9px 0;
+}
+
+.hitl-card {
+  margin-top: 15px;
+  padding: 15px;
+  border: 1px solid #dfbd79;
+  border-left: 4px solid #c58a27;
+  border-radius: 11px;
+  background: #fffaf0;
+}
+
+.hitl-card pre {
+  max-height: 220px;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: #f4efe5;
+  font-size: 9px;
+  white-space: pre-wrap;
+}
+
+.hitl-card.resolved {
+  border-color: #9bc5b1;
+  background: #edf7f2;
+}
+
+.hitl-actions {
+  display: flex;
+  gap: 8px;
+  margin: 11px 0;
+}
+
 .evidence-row small {
   margin-top: 3px;
   color: var(--muted);

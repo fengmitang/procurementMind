@@ -33,6 +33,7 @@ from agent_app.schemas.backend import (
     PurchaseHistoryRecommendationData,
     PurchaseRecordListData,
     RequirementDetailData,
+    RequirementMutationData,
     SnapshotSavedData,
     StateSavedData,
     SupplierRecommendationData,
@@ -410,6 +411,58 @@ class ProcurementBackendClient:
             trace_id=trace_id,
             identity=identity,
             json={"purchase_request_id": purchase_request_id},
+        )
+
+    async def execute_confirmed_action(
+        self,
+        identity: BackendIdentity,
+        *,
+        action_type: str,
+        action_id: str,
+        draft: dict,
+        trace_id: str,
+    ) -> RequirementMutationData:
+        """Execute an allow-listed business action through the procurement API."""
+        requirement_id = int(draft["requirement_id"])
+        expected_version = int(draft["expected_version"])
+        action_token = f"AGENT-{action_id}"[:64]
+        path = f"/api/v1/requirements/{requirement_id}"
+        method = "POST"
+        body: dict = {
+            "expected_version": expected_version,
+            "action_token": action_token,
+        }
+        if action_type == "SUBMIT_PURCHASE_REQUEST":
+            path += "/submit-review"
+            body["assigned_to_employee_id"] = int(draft["assigned_to_employee_id"])
+        elif action_type == "APPROVE_PURCHASE_REQUEST":
+            path += "/submit-purchaser"
+            body["assigned_to_employee_id"] = int(draft["assigned_to_employee_id"])
+        elif action_type == "REJECT_PURCHASE_REQUEST":
+            path += "/reject"
+            body["reason"] = str(draft["reason"])
+        elif action_type in {"SELECT_FINAL_SUPPLIER", "WRITE_PURCHASE_RESULT"}:
+            method = "PATCH"
+            path += "/purchase-fields"
+            body = {"expected_version": expected_version, "fields": draft["fields"]}
+        elif action_type == "SUBMIT_WAREHOUSE":
+            path += "/submit-warehouse"
+            body["assigned_to_employee_id"] = int(draft["assigned_to_employee_id"])
+        elif action_type == "RECORD_WAREHOUSE":
+            method = "PATCH"
+            path += "/warehouse-fields"
+            body = {"expected_version": expected_version, "fields": draft["fields"]}
+        elif action_type == "COMPLETE_PURCHASE":
+            path += "/complete"
+        else:
+            raise ValueError(f"Unsupported confirmed action: {action_type}")
+        return await self._request(
+            method,
+            path,
+            RequirementMutationData,
+            trace_id=trace_id,
+            identity=identity,
+            json=body,
         )
 
     async def _request(

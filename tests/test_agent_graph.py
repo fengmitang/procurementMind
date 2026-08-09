@@ -124,9 +124,14 @@ async def test_graph_queries_realtime_request_and_records_trace() -> None:
     assert result.tool_results[0].success is True
     assert result.evidence[0].reference_id == "91007"
     assert [event.name for event in result.trace_events] == [
+        "load_context",
         "first_version_router",
         "get_purchase_request",
+        "sufficiency_check",
         "compose_answer",
+        "review",
+        "confirmation",
+        "finalize",
     ]
     assert mcp.calls == [("get_purchase_request", {"requirement_id": 91007})]
 

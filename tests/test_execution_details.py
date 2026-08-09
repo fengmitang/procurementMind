@@ -53,9 +53,14 @@ async def test_execution_details_restore_graph_tool_and_usage_facts() -> None:
     assert details.status == "COMPLETE"
     assert details.duration_ms >= 0
     assert [event.name for event in details.trace_events] == [
+        "load_context",
         "first_version_router",
         "get_purchase_request",
+        "sufficiency_check",
         "compose_answer",
+        "review",
+        "confirmation",
+        "finalize",
     ]
     assert details.tools[0].name == "get_purchase_request"
     assert details.tools[0].trace_id == details.trace_id
@@ -66,8 +71,8 @@ async def test_execution_details_restore_graph_tool_and_usage_facts() -> None:
         "GRAPH": "SUCCESS",
         "MCP": "SUCCESS",
         "MODEL": "SKIPPED",
-        "RAG": "NOT_CONFIGURED",
-        "REVIEW": "SKIPPED",
+        "RAG": "SKIPPED",
+        "REVIEW": "SUCCESS",
     }
 
 

@@ -60,6 +60,25 @@ services:
     labels:
       com.procurement-mind.resource: "redis"
 
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    container_name: procurement-mind-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - procurement-mind-qdrant-data:/qdrant/storage
+    networks:
+      - procurement-mind-network
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    labels:
+      com.procurement-mind.resource: "qdrant"
+
   migrate:
     build:
       context: .
@@ -190,7 +209,12 @@ services:
       MODEL_STRUCTURED_OUTPUT_RETRIES: ${MODEL_STRUCTURED_OUTPUT_RETRIES:-1}
       MODEL_CIRCUIT_FAILURE_THRESHOLD: ${MODEL_CIRCUIT_FAILURE_THRESHOLD:-3}
       MODEL_CIRCUIT_RECOVERY_TIMEOUT_SECONDS: ${MODEL_CIRCUIT_RECOVERY_TIMEOUT_SECONDS:-30}
-      CHROMA_PERSIST_DIRECTORY: /app/.data/chroma
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-procurement_knowledge_child}
+      QDRANT_TIMEOUT_SECONDS: ${QDRANT_TIMEOUT_SECONDS:-10}
+      RAG_DENSE_VECTOR_SIZE: ${RAG_DENSE_VECTOR_SIZE:-1024}
+      RAG_DENSE_VECTOR_NAME: ${RAG_DENSE_VECTOR_NAME:-dense}
+      RAG_SPARSE_VECTOR_NAME: ${RAG_SPARSE_VECTOR_NAME:-bm25}
       MAX_TOOL_CALLS: ${MAX_TOOL_CALLS:-8}
       MAX_EXECUTION_STEPS: ${MAX_EXECUTION_STEPS:-12}
       TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-120}
@@ -205,6 +229,8 @@ services:
       - procurement-mind-network
     depends_on:
       backend:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     healthcheck:
       test:
@@ -241,3 +267,7 @@ volumes:
     name: procurement-mind-agent-data
     labels:
       com.procurement-mind.resource: "agent-data"
+  procurement-mind-qdrant-data:
+    name: procurement-mind-qdrant-data
+    labels:
+      com.procurement-mind.resource: "qdrant-data"

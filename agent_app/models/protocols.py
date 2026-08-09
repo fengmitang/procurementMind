@@ -1,13 +1,21 @@
 from enum import StrEnum
 from typing import Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 
 class ModelPurpose(StrEnum):
+    ROUTER = "ROUTER"
+    QUERY_REWRITE = "QUERY_REWRITE"
     ANALYSIS_PLAN = "ANALYSIS_PLAN"
     ANALYSIS_REPLAN = "ANALYSIS_REPLAN"
+    COMPOSE = "COMPOSE"
     REVIEW = "REVIEW"
+
+
+class ModelUsageSource(StrEnum):
+    PROVIDER_REPORTED = "PROVIDER_REPORTED"
+    UNAVAILABLE = "UNAVAILABLE"
 
 
 class ModelMessage(BaseModel):
@@ -34,6 +42,25 @@ class ModelUsage(BaseModel):
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
     total_tokens: int | None = Field(default=None, ge=0)
+    source: ModelUsageSource = ModelUsageSource.UNAVAILABLE
+
+    @model_validator(mode="after")
+    def reject_estimated_or_incomplete_usage(self) -> "ModelUsage":
+        values = (self.input_tokens, self.output_tokens, self.total_tokens)
+        populated = [value is not None for value in values]
+        if any(populated) and not all(populated):
+            raise ValueError("模型 Token 用量必须完整提供 input/output/total")
+        if all(populated):
+            if self.source is not ModelUsageSource.PROVIDER_REPORTED:
+                raise ValueError("Token 用量只能标记为供应商真实返回")
+            assert self.input_tokens is not None
+            assert self.output_tokens is not None
+            assert self.total_tokens is not None
+            if self.total_tokens < self.input_tokens + self.output_tokens:
+                raise ValueError("total_tokens 不能小于 input_tokens + output_tokens")
+        elif self.source is not ModelUsageSource.UNAVAILABLE:
+            raise ValueError("未提供 Token 用量时 source 必须为 UNAVAILABLE")
+        return self
 
 
 class StructuredModelResponse(BaseModel):

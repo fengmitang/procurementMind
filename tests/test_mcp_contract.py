@@ -105,8 +105,28 @@ async def test_standard_stdio_handshake_discovery_call_and_trace(backend_url: st
         assert "platform_type" not in properties
         assert "platform_user_id" not in properties
         assert "trace_id" not in properties
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is True
+        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.idempotentHint is True
+        assert tool.annotations.openWorldHint is False
+        assert tool.meta is not None
+        metadata = tool.meta["procurementMind"]
+        assert metadata["namespace"] in {
+            "procurement",
+            "product",
+            "supplier",
+            "analytics",
+        }
+        assert metadata["sourceOfTruth"] == "procurement_backend"
+        assert metadata["visibility"] == "backend_enforced"
+        assert metadata["ragBoundary"] == "not_a_knowledge_source"
+        assert metadata["requiresConfirmation"] is False
     assert result.success is True
     assert result.trace_id == "trace-mcp-contract"
+    assert result.metadata is not None
+    assert result.metadata.namespace == "procurement"
+    assert result.metadata.fact_kind == "identity_context"
     assert result.data["name"] == "MCP 测试用户"
     assert CurrentUserHandler.received_headers["X-Platform-User-Id"] == "mcp-user"
     assert CurrentUserHandler.received_headers["X-Request-Id"] == "trace-mcp-contract"

@@ -1,4 +1,4 @@
-from agent_app.graph.schemas import GraphRunRequest, GraphRunResult, RouteType
+from agent_app.graph.schemas import GraphRunRequest, GraphRunResult, PendingAction, RouteType
 from agent_app.schemas.analytics import AnalyticsQueryInput
 from agent_app.schemas.backend import ConversationStatePayload
 
@@ -19,6 +19,18 @@ class GraphMemoryMapper:
             return None
         try:
             return AnalyticsQueryInput.model_validate(value)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def pending_action(request: GraphRunRequest) -> PendingAction | None:
+        if request.restored_state is None:
+            return None
+        value = request.restored_state.collected_data.get("pending_action")
+        if not isinstance(value, dict):
+            return None
+        try:
+            return PendingAction.model_validate(value)
         except ValueError:
             return None
 
@@ -50,6 +62,18 @@ class GraphMemoryMapper:
             collected_data["last_risk_investigation"] = result.risk_investigation.model_dump(
                 mode="json"
             )
+        if result.knowledge is not None:
+            collected_data["last_knowledge"] = {
+                "query": result.knowledge.original_query,
+                "citation_ids": [item.citation_id for item in result.knowledge.citations],
+                "retrieval_trace_id": result.knowledge.trace.trace_id,
+            }
+        if result.review is not None:
+            collected_data["last_review"] = result.review.model_dump(mode="json")
+        if result.pending_action is not None:
+            collected_data["pending_action"] = result.pending_action.model_dump(mode="json")
+        else:
+            collected_data.pop("pending_action", None)
         recent_messages = list(previous.recent_messages if previous else [])
         recent_messages.extend(
             [
@@ -71,7 +95,7 @@ class GraphMemoryMapper:
             collected_data=collected_data,
             missing_fields=["purchase_request_id"] if needs_request_id else [],
             pending_field="purchase_request_id" if needs_request_id else None,
-            awaiting_confirmation=False,
+            awaiting_confirmation=result.pending_action is not None,
             recent_messages=recent_messages[-10:],
             last_recommendations=list(previous.last_recommendations if previous else []),
         )

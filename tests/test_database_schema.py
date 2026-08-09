@@ -15,6 +15,8 @@ BUSINESS_TABLES = {
     "employee_external_identity",
     "employee_role",
     "notification_outbox",
+    "knowledge_document",
+    "knowledge_parent",
     "purchase_execution",
     "purchase_operation_log",
     "purchase_request",

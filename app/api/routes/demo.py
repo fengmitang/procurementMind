@@ -1,8 +1,9 @@
+import json
 import time
 from uuid import uuid4
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from httpx import ASGITransport, AsyncClient, HTTPError
 
 from app.core.config import get_settings
@@ -13,7 +14,7 @@ from app.schemas.demo import DemoAgentActionRequest, DemoAgentChatRequest, DemoP
 
 router = APIRouter(prefix="/demo-api", tags=["development-demo"])
 
-ALLOWED_METHODS = {"GET", "POST", "PUT", "PATCH"}
+ALLOWED_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 ALLOWED_TEST_USERS = {f"test-user-{index:02d}" for index in range(1, 9)}
 
 
@@ -36,6 +37,7 @@ async def forward_agent_chat(
                     "message": payload.message,
                     "external_conversation_id": payload.external_conversation_id,
                     "external_message_id": payload.external_message_id,
+                    "ui_context": payload.ui_context,
                 },
             )
     except HTTPError as exc:
@@ -104,6 +106,77 @@ async def demo_agent_chat(payload: DemoAgentChatRequest) -> JSONResponse:
     trace_id = request_id_context.get() or str(uuid4())
     status_code, body = await forward_agent_chat(payload, trace_id)
     return JSONResponse(status_code=status_code, content=body)
+
+
+@router.post("/agent-chat/stream", include_in_schema=False, response_model=None)
+async def demo_agent_chat_stream(
+    payload: DemoAgentChatRequest,
+) -> JSONResponse | StreamingResponse:
+    settings = get_settings()
+    if settings.app_env.lower() != "development":
+        raise AppError("NOT_FOUND", "页面不存在", 404)
+    if payload.platform_user_id not in ALLOWED_TEST_USERS:
+        raise AppError("DEMO_USER_NOT_ALLOWED", "体验界面只允许 TEST 测试用户", 403)
+    trace_id = request_id_context.get() or str(uuid4())
+    client = AsyncClient(
+        base_url=settings.agent_service_url.rstrip("/"),
+        timeout=settings.agent_service_timeout_seconds,
+    )
+    stream_context = client.stream(
+        "POST",
+        "/api/v1/chat/stream",
+        headers={"X-Request-Id": trace_id, "Accept": "text/event-stream"},
+        json={
+            "platform_type": "TEST_PLATFORM",
+            "platform_user_id": payload.platform_user_id,
+            "message": payload.message,
+            "external_conversation_id": payload.external_conversation_id,
+            "external_message_id": payload.external_message_id,
+            "ui_context": payload.ui_context,
+        },
+    )
+    try:
+        upstream = await stream_context.__aenter__()
+    except HTTPError as exc:
+        await client.aclose()
+        raise AppError(
+            "AGENT_SERVICE_UNAVAILABLE",
+            "智能助手暂时不可用，请稍后重试",
+            503,
+        ) from exc
+    if upstream.is_error:
+        raw = await upstream.aread()
+        await stream_context.__aexit__(None, None, None)
+        await client.aclose()
+        try:
+            body = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            body = {
+                "success": False,
+                "code": "AGENT_SERVICE_PROTOCOL_ERROR",
+                "message": "智能助手返回了无效响应",
+                "data": None,
+                "trace_id": trace_id,
+            }
+        return JSONResponse(status_code=upstream.status_code, content=body)
+
+    async def forward_stream():
+        try:
+            async for chunk in upstream.aiter_bytes():
+                yield chunk
+        finally:
+            await stream_context.__aexit__(None, None, None)
+            await client.aclose()
+
+    return StreamingResponse(
+        forward_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "X-Trace-Id": trace_id,
+        },
+    )
 
 
 @router.post("/agent-actions/{action}", include_in_schema=False)

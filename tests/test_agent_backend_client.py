@@ -18,6 +18,7 @@ TEST_SECRET = "test-agent-gateway-secret-value"
 
 def settings(**overrides) -> AgentSettings:
     values = {
+        "_env_file": None,
         "identity_gateway_secret": TEST_SECRET,
         "procurement_backend_url": "http://backend.test",
         "procurement_backend_retry_delay_seconds": 0,

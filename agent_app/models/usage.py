@@ -9,6 +9,10 @@ class ModelCallUsageRecord(BaseModel):
     purpose: ModelPurpose
     provider: str
     model: str
+    primary_model: str
+    actual_model: str
+    fallback_used: bool = False
+    fallback_reason: str | None = None
     attempts: int = Field(ge=1)
     latency_ms: int = Field(ge=0)
     input_tokens: int | None = Field(default=None, ge=0)
@@ -47,6 +51,10 @@ class ModelUsageLedger:
                 purpose=purpose,
                 provider=response.provider,
                 model=response.model,
+                primary_model=response.primary_model or response.model,
+                actual_model=response.actual_model or response.model,
+                fallback_used=response.fallback_used,
+                fallback_reason=response.fallback_reason,
                 attempts=attempts,
                 latency_ms=response.latency_ms,
                 input_tokens=usage.input_tokens,

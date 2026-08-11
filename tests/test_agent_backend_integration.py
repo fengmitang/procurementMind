@@ -39,6 +39,7 @@ async def cleanup_conversation(conversation_id: int) -> None:
 def integration_settings(*, secret: str | None = None) -> AgentSettings:
     backend_settings = get_settings()
     return AgentSettings(
+        _env_file=None,
         identity_gateway_secret=secret or backend_settings.identity_gateway_secret,
         procurement_backend_url="http://backend.test",
         procurement_backend_max_retries=0,

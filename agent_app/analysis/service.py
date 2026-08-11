@@ -2,6 +2,7 @@ from agent_app.analysis.executor import AnalysisExecutor, AnalysisToolClient
 from agent_app.analysis.planner import AnalysisPlanner, DeterministicAnalysisPlanner
 from agent_app.analysis.schemas import (
     AnalysisOutput,
+    AnalysisPlan,
     AnalysisTable,
     AnalysisToolName,
 )
@@ -24,8 +25,9 @@ class AnalysisAgentService:
         client: AnalysisToolClient,
         *,
         previous_query: AnalyticsQueryInput | None = None,
+        prepared_plan: AnalysisPlan | None = None,
     ) -> AnalysisOutput:
-        plan = await self.planner.create_plan(message, previous_query)
+        plan = prepared_plan or await self.planner.create_plan(message, previous_query)
         execution = await self.executor.execute(plan, client, self.planner)
         successful = [step for step in execution.steps if step.success]
         warnings = [
@@ -62,7 +64,10 @@ class AnalysisAgentService:
                 if isinstance(items, list):
                     columns = list(items[0]) if items and isinstance(items[0], dict) else []
                     table = AnalysisTable(columns=columns, rows=items, total=len(items))
-                    if primary.tool is AnalysisToolName.GET_SIMILAR_CASES:
+                    if primary.tool in {
+                        AnalysisToolName.GET_SIMILAR_CASES,
+                        AnalysisToolName.RECOMMEND_SUPPLIERS,
+                    }:
                         candidates = items
                 summary = {
                     key: value for key, value in data.items() if key not in {"items", "signals"}

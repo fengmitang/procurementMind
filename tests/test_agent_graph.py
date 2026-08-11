@@ -6,7 +6,7 @@ import pytest
 from agent_app.core.config import AgentSettings
 from agent_app.graph.memory import GraphMemoryMapper
 from agent_app.graph.router import FirstVersionRouter
-from agent_app.graph.schemas import GraphRunRequest, RouteType
+from agent_app.graph.schemas import GraphRunRequest, RouteType, UIContext
 from agent_app.graph.service import ProcurementGraphService
 from agent_app.mcp.client import MCPClientError
 from agent_app.mcp.schemas import MCPToolResponse
@@ -40,7 +40,11 @@ def current_user() -> CurrentUserData:
     )
 
 
-def request(message: str, restored_state: ConversationStateData | None = None) -> GraphRunRequest:
+def request(
+    message: str,
+    restored_state: ConversationStateData | None = None,
+    ui_context: UIContext | None = None,
+) -> GraphRunRequest:
     return GraphRunRequest(
         task_id=uuid4(),
         trace_id="trace-graph",
@@ -51,6 +55,7 @@ def request(message: str, restored_state: ConversationStateData | None = None) -
         ),
         current_user=current_user(),
         message=message,
+        ui_context=ui_context,
         restored_state=restored_state,
     )
 
@@ -101,12 +106,26 @@ def factory_for(client: FakeMCPClient):
         ("采购流程有哪些规定", RouteType.KNOWLEDGE),
         ("查询采购申请 91007 当前状态", RouteType.REALTIME_BUSINESS),
         ("为什么采购申请 91007 还不能提交", RouteType.HYBRID),
+        ("这张采购单现在被驳回了，我接下来应该怎么处理？", RouteType.HYBRID),
         ("统计各楼宇采购金额趋势", RouteType.COMPLEX_QUERY),
         ("调查供应商黑名单风险", RouteType.RISK_INVESTIGATION),
     ],
 )
 def test_first_router_distinguishes_five_routes(message: str, expected: RouteType) -> None:
     assert FirstVersionRouter().classify(message) is expected
+
+
+def test_explicit_knowledge_question_skips_slow_model_router() -> None:
+    router = FirstVersionRouter()
+
+    assert router.classify("采购申请被楼长驳回后应该怎么办？") is RouteType.KNOWLEDGE
+    assert router.should_use_model("采购申请被楼长驳回后应该怎么办？") is False
+    assert router.should_use_model("帮我看看这个情况") is True
+
+
+def test_incomplete_model_answer_is_detected_for_deterministic_completion() -> None:
+    assert ProcurementGraphService._answer_looks_incomplete("接下来应按以下步骤处理：") is True
+    assert ProcurementGraphService._answer_looks_incomplete("请按驳回原因修改后重新提交。") is False
 
 
 @pytest.mark.asyncio
@@ -158,6 +177,28 @@ async def test_graph_recovers_request_id_from_backend_conversation_state() -> No
     assert backend_state.collected_data["last_route"] == "REALTIME_BUSINESS"
     assert backend_state.collected_data["last_trace_events"]
     assert backend_state.recent_messages[-1]["sender_type"] == "AGENT"
+
+
+@pytest.mark.asyncio
+async def test_graph_uses_ui_context_identifier_but_requeries_authoritative_fact() -> None:
+    mcp = FakeMCPClient(requirement_response())
+    service = ProcurementGraphService(settings(), mcp_client_factory=factory_for(mcp))
+
+    result = await service.run(
+        request(
+            "查询当前采购单状态",
+            ui_context=UIContext(
+                page_type="REQUIREMENT_REVIEW",
+                requirement_id=91007,
+                user_draft={"review_opinion": "尚未提交的草稿"},
+            ),
+        )
+    )
+
+    assert result.purchase_request_id == 91007
+    assert mcp.calls == [("get_purchase_request", {"requirement_id": 91007})]
+    assert result.trace_events[0].result["ui_context_used"] is True
+    assert result.trace_events[0].result["context_is_authoritative"] is False
 
 
 @pytest.mark.asyncio

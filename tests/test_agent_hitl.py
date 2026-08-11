@@ -189,6 +189,7 @@ async def test_backend_action_executor_uses_allowlisted_endpoint_and_server_toke
         )
 
     settings = AgentSettings(
+        _env_file=None,
         identity_gateway_secret="test-secret-with-enough-length",
         procurement_backend_url="http://backend",
     )
@@ -219,6 +220,7 @@ async def test_agent_confirmation_endpoint_uses_identity_bound_state():
     backend = FakeBackend(pending_action())
     application = create_agent_app(
         AgentSettings(
+            _env_file=None,
             identity_gateway_secret="test-secret-with-enough-length",
             procurement_backend_url="http://backend",
         ),

@@ -30,3 +30,11 @@ class ModelAdapterRegistry:
     @property
     def providers(self) -> tuple[str, ...]:
         return tuple(sorted(self._factories))
+
+
+def build_default_model_registry() -> ModelAdapterRegistry:
+    from agent_app.models.openai_compatible import OpenAICompatibleStructuredAdapter
+
+    registry = ModelAdapterRegistry()
+    registry.register("openai_compatible", OpenAICompatibleStructuredAdapter)
+    return registry

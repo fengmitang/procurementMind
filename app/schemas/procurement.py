@@ -178,6 +178,7 @@ class RequirementListQuery(BaseModel):
         "PENDING_FOR_ME",
         "PROCESSED_BY_ME",
         "BUILDING_SCOPE",
+        "ADMIN_SCOPE",
     ]
     status: str | None = None
     page: int = Field(default=1, ge=1)

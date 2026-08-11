@@ -7,6 +7,7 @@ import pytest
 from agent_app.clients.errors import ProcurementBackendUnavailable
 from agent_app.core.config import AgentSettings
 from agent_app.main import create_agent_app
+from agent_app.models.runtime import ModelRuntimeStatus
 from agent_app.schemas.backend import (
     ActiveConversationData,
     BackendReadinessData,
@@ -103,6 +104,7 @@ class FakeProcurementBackendClient:
 
 def settings() -> AgentSettings:
     return AgentSettings(
+        _env_file=None,
         identity_gateway_secret=TEST_SECRET,
         procurement_backend_url="http://backend.test",
     )
@@ -153,6 +155,55 @@ async def test_agent_ready_distinguishes_backend_failure() -> None:
         "status": "not_ready",
         "procurement_backend": "error",
         "model": "not_configured",
+    }
+
+
+@pytest.mark.asyncio
+async def test_app_bootstraps_registered_model_runtime_without_manual_roles() -> None:
+    configured = settings().model_copy(
+        update={
+            "model_provider": "openai_compatible",
+            "model_api_key": "unit-test-key",
+            "model_base_url": "http://model.test/v1",
+            "primary_model": "primary-model",
+            "fallback_model": "fallback-model",
+        }
+    )
+    application = create_agent_app(configured, FakeProcurementBackendClient())
+
+    assert application.state.model_runtime.status is ModelRuntimeStatus.READY
+    assert application.state.graph_service.model_roles is not None
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=application),
+        base_url="http://agent.test",
+    ) as client:
+        response = await client.get("/ready")
+
+    assert response.json()["data"]["model"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_ready_reports_provider_not_registered_from_runtime_state() -> None:
+    configured = settings().model_copy(
+        update={
+            "model_provider": "missing-provider",
+            "model_api_key": "unit-test-key",
+            "model_base_url": "http://model.test/v1",
+            "primary_model": "primary-model",
+        }
+    )
+    application = create_agent_app(configured, FakeProcurementBackendClient())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=application),
+        base_url="http://agent.test",
+    ) as client:
+        response = await client.get("/ready")
+
+    assert response.json()["code"] == "SERVICE_NOT_READY"
+    assert response.json()["data"] == {
+        "status": "not_ready",
+        "procurement_backend": "ok",
+        "model": "provider_not_registered",
     }
 
 

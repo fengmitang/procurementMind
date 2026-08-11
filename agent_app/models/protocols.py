@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from typing import Protocol
 
@@ -72,6 +73,22 @@ class StructuredModelResponse(BaseModel):
     usage: ModelUsage = Field(default_factory=ModelUsage)
     latency_ms: int = Field(ge=0)
     request_id: str | None = None
+    primary_model: str | None = None
+    actual_model: str | None = None
+    fallback_used: bool = False
+    fallback_reason: str | None = None
+
+    @model_validator(mode="after")
+    def populate_runtime_model_metadata(self) -> "StructuredModelResponse":
+        if self.primary_model is None:
+            self.primary_model = self.model
+        if self.actual_model is None:
+            self.actual_model = self.model
+        if self.fallback_used and not self.fallback_reason:
+            raise ValueError("fallback_used=true 时必须提供 fallback_reason")
+        if not self.fallback_used and self.fallback_reason is not None:
+            raise ValueError("未使用 fallback 时不能提供 fallback_reason")
+        return self
 
 
 class ModelAdapterError(RuntimeError):
@@ -86,4 +103,15 @@ class StructuredModelAdapter(Protocol):
     async def complete_structured(
         self,
         request: StructuredModelRequest,
+    ) -> StructuredModelResponse: ...
+
+
+ModelDeltaHandler = Callable[[str], Awaitable[None]]
+
+
+class StreamingStructuredModelAdapter(StructuredModelAdapter, Protocol):
+    async def complete_structured_stream(
+        self,
+        request: StructuredModelRequest,
+        delta_handler: ModelDeltaHandler,
     ) -> StructuredModelResponse: ...

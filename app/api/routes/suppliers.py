@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Query
 
 from app.api.dependencies import CurrentUserDependency, DbSession
@@ -10,6 +12,7 @@ from app.schemas.suppliers import (
     SupplierCreatedData,
     SupplierCreateRequest,
     SupplierDetailData,
+    SupplierRiskListData,
     SupplierSearchData,
 )
 from app.services.suppliers import SupplierService
@@ -21,7 +24,8 @@ router = APIRouter(prefix="/api/v1/suppliers", tags=["suppliers"])
 async def search_suppliers(
     current_user: CurrentUserDependency,
     session: DbSession,
-    keyword: str = Query(min_length=1),
+    keyword: str | None = Query(default=None, min_length=1),
+    status: Literal["ACTIVE", "INACTIVE"] | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[SupplierSearchData]:
@@ -29,6 +33,26 @@ async def search_suppliers(
         session,
         current_user,
         keyword=keyword,
+        status={"ACTIVE": True, "INACTIVE": False}.get(status) if status else None,
+        page=page,
+        page_size=page_size,
+    )
+    return ApiResponse(data=data)
+
+
+@router.get(
+    "/risks/building-scope",
+    response_model=ApiResponse[SupplierRiskListData],
+)
+async def list_building_supplier_risks(
+    current_user: CurrentUserDependency,
+    session: DbSession,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ApiResponse[SupplierRiskListData]:
+    data = await SupplierService().list_building_risks(
+        session,
+        current_user,
         page=page,
         page_size=page_size,
     )

@@ -6,6 +6,7 @@ from sqlalchemy import inspect, text
 from app.db.session import engine
 
 BUSINESS_TABLES = {
+    "admin_operation_log",
     "agent_conversation",
     "agent_message",
     "agent_session_state",

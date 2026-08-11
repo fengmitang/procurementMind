@@ -10,6 +10,7 @@ class AnalysisToolName(StrEnum):
     GET_SUPPLIER_PERFORMANCE = "get_supplier_performance"
     GET_SIMILAR_CASES = "get_similar_cases"
     GET_REQUIREMENT_RISK_SIGNALS = "get_requirement_risk_signals"
+    RECOMMEND_SUPPLIERS = "recommend_suppliers"
 
 
 class AnalysisPlanStep(BaseModel):
@@ -33,6 +34,7 @@ class AnalysisPlanStep(BaseModel):
             },
             AnalysisToolName.GET_SIMILAR_CASES: {"requirement_id", "limit"},
             AnalysisToolName.GET_REQUIREMENT_RISK_SIGNALS: {"requirement_id"},
+            AnalysisToolName.RECOMMEND_SUPPLIERS: {"requirement_id", "limit"},
         }[self.tool]
         if not set(self.arguments).issubset(allowed_keys):
             raise ValueError(f"工具 {self.tool.value} 包含非白名单参数")

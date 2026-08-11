@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     risk_long_pending_days: int = Field(default=14, ge=1, le=365)
 
     agent_service_url: str = "http://127.0.0.1:8100"
-    agent_service_timeout_seconds: float = Field(default=130.0, gt=0, le=1800)
+    agent_service_timeout_seconds: float = Field(default=330.0, gt=0, le=1800)
 
     @property
     def database_url(self) -> str:

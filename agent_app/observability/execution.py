@@ -18,6 +18,16 @@ def build_execution_details(
     if review is None and result.risk_investigation:
         review = result.risk_investigation.review.model_dump(mode="json")
     plan = result.analysis.plan.model_dump(mode="json") if result.analysis else None
+    model_events = [
+        event
+        for event in result.trace_events
+        if isinstance(event.result, dict) and event.result.get("model_used") is True
+    ]
+    actual_models = [
+        str(event.result["actual_model"])
+        for event in model_events
+        if isinstance(event.result, dict) and event.result.get("actual_model")
+    ]
     return ExecutionDetails(
         trace_id=result.trace_id,
         route=result.route.value,
@@ -31,7 +41,8 @@ def build_execution_details(
         model_usage=ModelUsageSummary(
             configured=model_configured,
             provider=model_provider,
-            model=model_name,
+            model=actual_models[-1] if actual_models else model_name,
+            call_count=len(model_events),
         ),
         trace_events=result.trace_events,
         tools=result.tool_results,

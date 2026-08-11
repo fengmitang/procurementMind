@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from agent_app.core.config import AgentSettings
 from agent_app.models.fake import ScriptedModelAdapter
 from agent_app.models.protocols import (
+    ModelAdapterError,
     ModelPurpose,
     ModelUsage,
     ModelUsageSource,
@@ -280,3 +281,65 @@ async def test_configured_fake_runtime_uses_settings_and_records_real_usage() ->
     assert runtime.status is ModelRuntimeStatus.READY
     assert result.route == "KNOWLEDGE"
     assert runtime.usage_ledger.summary().total_tokens == 12
+
+
+@pytest.mark.asyncio
+async def test_runtime_uses_fallback_only_for_retryable_primary_failure() -> None:
+    primary = ScriptedModelAdapter(
+        [ModelAdapterError("MODEL_RATE_LIMITED", "rate limited", retryable=True)]
+    )
+    fallback = ScriptedModelAdapter(
+        [
+            StructuredModelResponse(
+                provider="fake",
+                model="fallback-model",
+                output={
+                    "route": "KNOWLEDGE",
+                    "confidence": 0.9,
+                    "reason": "knowledge question",
+                    "requires_realtime_tools": False,
+                    "requires_knowledge": True,
+                },
+                latency_ms=2,
+            )
+        ]
+    )
+    runner = StructuredModelRunner(
+        primary,
+        fallback_adapter=fallback,
+        primary_model="primary-model",
+        timeout_seconds=1,
+        max_retries=0,
+    )
+    gateway = StructuredModelRoles(runner, "trace-fallback")
+
+    result = await gateway.route("采购流程是什么？")
+    metadata = gateway.trace_metadata(ModelPurpose.ROUTER)
+
+    assert result.route == "KNOWLEDGE"
+    assert metadata is not None
+    assert metadata["primary_model"] == "primary-model"
+    assert metadata["actual_model"] == "fallback-model"
+    assert metadata["fallback_used"] is True
+    assert "MODEL_RATE_LIMITED" in metadata["fallback_reason"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_does_not_fallback_for_nonretryable_failure() -> None:
+    primary = ScriptedModelAdapter(
+        [ModelAdapterError("MODEL_AUTH_FAILED", "bad credentials", retryable=False)]
+    )
+    fallback = ScriptedModelAdapter([])
+    runner = StructuredModelRunner(
+        primary,
+        fallback_adapter=fallback,
+        primary_model="primary-model",
+        timeout_seconds=1,
+        max_retries=0,
+    )
+
+    with pytest.raises(StructuredModelRunError) as exc_info:
+        await StructuredModelRoles(runner, "trace-no-fallback").route("采购流程是什么？")
+
+    assert exc_info.value.code == "MODEL_AUTH_FAILED"
+    assert fallback.requests == []

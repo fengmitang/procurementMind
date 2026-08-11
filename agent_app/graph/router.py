@@ -14,8 +14,22 @@ _COMPLEX_TERMS = (
     "平均",
     "履约",
     "相似案例",
+    "推荐供应商",
 )
-_KNOWLEDGE_TERMS = ("制度", "流程", "规定", "规范", "如何", "为什么", "能否", "标准")
+_KNOWLEDGE_TERMS = (
+    "制度",
+    "流程",
+    "规定",
+    "规范",
+    "如何",
+    "为什么",
+    "能否",
+    "标准",
+    "接下来",
+    "怎么处理",
+    "怎么办",
+    "驳回后",
+)
 _REALTIME_TERMS = (
     "当前状态",
     "采购单状态",
@@ -26,7 +40,10 @@ _REALTIME_TERMS = (
     "到哪一步",
     "进度",
     "历史采购",
-    "推荐供应商",
+    "这张采购单",
+    "当前采购单",
+    "这张申请",
+    "当前申请",
 )
 _FORM_PREFILL_TERMS = (
     "预填采购申请",
@@ -61,6 +78,20 @@ class FirstVersionRouter:
         if has_realtime:
             return RouteType.REALTIME_BUSINESS
         return RouteType.KNOWLEDGE
+
+    def should_use_model(self, message: str) -> bool:
+        """Reserve the slower model router for queries without explicit route signals."""
+        normalized = re.sub(r"\s+", "", message.lower())
+        terms = (
+            *_RISK_TERMS,
+            *_COMPLEX_TERMS,
+            *_KNOWLEDGE_TERMS,
+            *_REALTIME_TERMS,
+            *_FORM_PREFILL_TERMS,
+        )
+        return not any(term in normalized for term in terms) and not bool(
+            self.extract_requirement_id(message)
+        )
 
     @staticmethod
     def extract_requirement_id(message: str) -> int | None:

@@ -32,7 +32,12 @@ app.add_middleware(RequestIdMiddleware)
 register_exception_handlers(app)
 app.include_router(api_router)
 
-demo_directory = Path(__file__).resolve().parents[1] / "frontend"
+frontend_directory = Path(__file__).resolve().parents[1] / "frontend"
+demo_directory = (
+    frontend_directory / "dist"
+    if (frontend_directory / "dist" / "index.html").exists()
+    else frontend_directory
+)
 if settings.app_env.lower() == "development" and demo_directory.exists():
     app.mount(
         "/demo",

@@ -33,6 +33,20 @@ class TraceEventType(StrEnum):
     ERROR = "ERROR"
 
 
+class UIContext(BaseModel):
+    """Untrusted navigation context supplied by a first-party UI.
+
+    Only identifiers and draft form values are accepted here. The graph must still
+    query the procurement backend before treating any business value as fact.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    page_type: str = Field(min_length=1, max_length=64)
+    requirement_id: int = Field(gt=0)
+    user_draft: dict[str, JsonValue] | None = None
+
+
 class GraphError(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -85,6 +99,7 @@ class GraphRunRequest(BaseModel):
     identity: BackendIdentity
     current_user: CurrentUserData
     message: str = Field(min_length=1, max_length=8000)
+    ui_context: UIContext | None = None
     restored_state: ConversationStateData | None = None
 
 
@@ -147,6 +162,7 @@ class GraphState(TypedDict, total=False):
     identity: dict[str, JsonValue]
     current_user: dict[str, JsonValue]
     message: str
+    ui_context: dict[str, JsonValue] | None
     route: str
     purchase_request_id: int | None
     restored_from_snapshot: bool

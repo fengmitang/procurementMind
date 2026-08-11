@@ -12,6 +12,7 @@ TEST_SECRET = "test-agent-gateway-secret-value"
 
 def test_agent_settings_normalize_backend_url_and_hide_secret() -> None:
     settings = AgentSettings(
+        _env_file=None,
         identity_gateway_secret=TEST_SECRET,
         procurement_backend_url="http://backend.local/",
     )
@@ -24,6 +25,7 @@ def test_agent_settings_normalize_backend_url_and_hide_secret() -> None:
 def test_agent_settings_reject_invalid_backend_url() -> None:
     with pytest.raises(ValidationError):
         AgentSettings(
+            _env_file=None,
             identity_gateway_secret=TEST_SECRET,
             procurement_backend_url="backend.local",
         )

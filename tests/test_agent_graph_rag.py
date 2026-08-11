@@ -202,7 +202,7 @@ async def test_form_prefill_creates_draft_and_never_executes_business_action() -
 
 
 @pytest.mark.asyncio
-async def test_configured_model_roles_are_used_for_route_compose_and_review() -> None:
+async def test_configured_model_roles_are_used_for_route_and_compose() -> None:
     adapter = ScriptedModelAdapter(
         [
             model_response(
@@ -240,14 +240,13 @@ async def test_configured_model_roles_are_used_for_route_compose_and_review() ->
         settings(),
         knowledge_retriever=FakeRetriever(),
         model_roles=model_roles,
-    ).run(applicant_request("采购申请被驳回后如何处理？"))
+    ).run(applicant_request("请帮我处理这个问题"))
 
     assert result.reply == "模型基于可见证据生成的回答 [K1]"
     assert result.review is not None and result.review.passed is True
     assert [request.purpose for request in adapter.requests] == [
         ModelPurpose.ROUTER,
         ModelPurpose.COMPOSE,
-        ModelPurpose.REVIEW,
     ]
     assert result.trace_events[1].name == "model_router"
     compose_trace = next(item for item in result.trace_events if item.name == "compose_answer")

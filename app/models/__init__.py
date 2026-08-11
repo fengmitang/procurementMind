@@ -2,6 +2,7 @@
 
 from app.models.agent import AgentConversation, AgentMessage, AgentSessionState
 from app.models.identity import (
+    AdminOperationLog,
     Building,
     Employee,
     EmployeeBuilding,
@@ -25,6 +26,7 @@ __all__ = [
     "AgentConversation",
     "AgentMessage",
     "AgentSessionState",
+    "AdminOperationLog",
     "Building",
     "Employee",
     "EmployeeBuilding",

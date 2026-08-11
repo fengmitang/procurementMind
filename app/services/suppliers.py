@@ -19,6 +19,8 @@ from app.schemas.suppliers import (
     SupplierCreatedData,
     SupplierCreateRequest,
     SupplierDetailData,
+    SupplierRiskItem,
+    SupplierRiskListData,
     SupplierSearchData,
     SupplierSummaryData,
 )
@@ -35,13 +37,15 @@ class SupplierService:
         session: AsyncSession,
         current_user: CurrentUser,
         *,
-        keyword: str,
+        keyword: str | None,
+        status: bool | None,
         page: int,
         page_size: int,
     ) -> SupplierSearchData:
         suppliers, total = await self.repository.search(
             session,
             keyword,
+            status,
             page,
             page_size,
         )
@@ -59,9 +63,68 @@ class SupplierService:
                     supplier_name=supplier.supplier_name,
                     unified_social_credit_code=supplier.unified_social_credit_code,
                     blacklist_status=status,
+                    status=supplier.status,
                 )
             )
         return SupplierSearchData(
+            items=items,
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    async def list_building_risks(
+        self,
+        session: AsyncSession,
+        current_user: CurrentUser,
+        *,
+        page: int,
+        page_size: int,
+    ) -> SupplierRiskListData:
+        require_any_role(
+            current_user,
+            RoleCode.BUILDING_MANAGER.value,
+            RoleCode.ADMIN.value,
+        )
+        building_ids = (
+            None if current_user.has_any_role(RoleCode.ADMIN.value) else current_user.building_ids
+        )
+        rows, total = await self.repository.list_building_risks(
+            session,
+            building_ids=building_ids,
+            page=page,
+            page_size=page_size,
+        )
+        now = datetime.now()
+        items = []
+        for blacklist, request in rows:
+            effective = (
+                blacklist.status == "ACTIVE"
+                and blacklist.start_at <= now
+                and blacklist.released_at is None
+                and (
+                    blacklist.duration_type == "PERMANENT"
+                    or (blacklist.end_at is not None and blacklist.end_at > now)
+                )
+            )
+            items.append(
+                SupplierRiskItem(
+                    blacklist_id=blacklist.blacklist_id,
+                    supplier_id=blacklist.supplier_id,
+                    supplier_name=blacklist.supplier_name_snapshot,
+                    blacklist_type=blacklist.blacklist_type,
+                    risk_reason=blacklist.blacklist_reason,
+                    status=blacklist.status,
+                    start_at=blacklist.start_at,
+                    end_at=blacklist.end_at,
+                    released_at=blacklist.released_at,
+                    release_reason=blacklist.release_reason,
+                    is_effective=effective,
+                    source_requirement_id=request.request_id,
+                    source_requirement_no=request.request_no,
+                )
+            )
+        return SupplierRiskListData(
             items=items,
             page=page,
             page_size=page_size,
@@ -123,7 +186,7 @@ class SupplierService:
         if conflict is not None:
             raise AppError(
                 "SUPPLIER_MATCH_CONFLICT",
-                f"存在可能重复的供应商，supplier_id={conflict.supplier_id}",
+                "存在名称或统一社会信用代码相同的供应商，请先核对现有主档",
                 409,
             )
         supplier = Supplier(**payload.model_dump(), status=True)

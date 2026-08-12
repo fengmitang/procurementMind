@@ -38,6 +38,7 @@ class AnalyticsQueryInput(BaseModel):
 
     created_from: date | None = None
     created_to: date | None = None
+    created_by_me: bool = False
     building_ids: list[int] = Field(default_factory=list, max_length=50)
     device_professions: list[str] = Field(default_factory=list, max_length=20)
     device_name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -100,7 +101,9 @@ class PurchaseAnalysisItem(BaseModel):
     brand: str | None
     model: str | None
     quantity: Decimal | None
+    unit: str | None
     status: str
+    current_handler_name: str | None
     supplier_id: int | None
     supplier_name: str | None
     actual_unit_price: Decimal | None

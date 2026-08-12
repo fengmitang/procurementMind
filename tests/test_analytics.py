@@ -103,6 +103,30 @@ async def test_controlled_purchase_query_matches_seeded_standard_answers() -> No
 
 
 @pytest.mark.asyncio
+async def test_purchase_query_can_scope_to_current_applicant_and_returns_card_fields() -> None:
+    path = "/api/v1/analytics/purchase-query"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await call(
+            client,
+            "POST",
+            path,
+            "test-user-01",
+            json={
+                "created_from": "2026-01-01",
+                "created_to": "2026-12-31",
+                "created_by_me": True,
+                "page_size": 100,
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    items = response.json()["data"]["items"]
+    assert items
+    assert all(item["requirement_no"] for item in items)
+    assert all("current_handler_name" in item and "unit" in item for item in items)
+
+
+@pytest.mark.asyncio
 async def test_query_dsl_rejects_unknown_sql_and_invalid_ranges() -> None:
     path = "/api/v1/analytics/purchase-query"
     async with AsyncClient(

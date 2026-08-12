@@ -7,6 +7,7 @@ from app.schemas.agent_sessions import (
     ActiveConversationRequest,
     CompleteConversationRequest,
     ConversationCompletedData,
+    ConversationListData,
     ConversationStateData,
     ConversationStatePayload,
     CreateMessageRequest,
@@ -19,6 +20,17 @@ from app.schemas.agent_sessions import (
 from app.services.agent_sessions import AgentSessionService
 
 router = APIRouter(prefix="/api/v1/agent/conversations", tags=["agent-support"])
+
+
+@router.get("", response_model=ApiResponse[ConversationListData])
+async def list_conversations(
+    current_user: CurrentUserDependency,
+    session: DbSession,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=30, ge=1, le=100),
+) -> ApiResponse[ConversationListData]:
+    data = await AgentSessionService().list_conversations(session, current_user, page, page_size)
+    return ApiResponse(data=data)
 
 
 @router.post("/active", response_model=ApiResponse[ActiveConversationData])

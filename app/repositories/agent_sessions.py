@@ -32,6 +32,73 @@ class AgentSessionRepository:
             .limit(1)
         )
 
+    async def get_active_by_external_id(
+        self,
+        session: AsyncSession,
+        employee_id: int,
+        external_conversation_id: str,
+    ) -> AgentConversation | None:
+        return await session.scalar(
+            select(AgentConversation).where(
+                AgentConversation.employee_id == employee_id,
+                AgentConversation.external_conversation_id == external_conversation_id,
+                AgentConversation.status == "ACTIVE",
+            )
+        )
+
+    async def list_conversations(
+        self,
+        session: AsyncSession,
+        employee_id: int,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[AgentConversation], int]:
+        condition = AgentConversation.employee_id == employee_id
+        total = int(
+            await session.scalar(
+                select(func.count()).select_from(AgentConversation).where(condition)
+            )
+            or 0
+        )
+        items = list(
+            (
+                await session.scalars(
+                    select(AgentConversation)
+                    .where(condition)
+                    .order_by(
+                        AgentConversation.last_active_at.desc(),
+                        AgentConversation.conversation_id.desc(),
+                    )
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                )
+            ).all()
+        )
+        return items, total
+
+    async def first_user_message(
+        self, session: AsyncSession, conversation_id: int
+    ) -> AgentMessage | None:
+        return await session.scalar(
+            select(AgentMessage)
+            .where(
+                AgentMessage.conversation_id == conversation_id,
+                AgentMessage.sender_type == "USER",
+            )
+            .order_by(AgentMessage.created_at, AgentMessage.message_id)
+            .limit(1)
+        )
+
+    async def message_count(self, session: AsyncSession, conversation_id: int) -> int:
+        return int(
+            await session.scalar(
+                select(func.count())
+                .select_from(AgentMessage)
+                .where(AgentMessage.conversation_id == conversation_id)
+            )
+            or 0
+        )
+
     async def get_conversation(
         self,
         session: AsyncSession,

@@ -1,8 +1,10 @@
 import json
+import re
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from contextvars import ContextVar
+from datetime import date, timedelta
 from typing import Any, Protocol, cast
 
 from langgraph.graph import END, START, StateGraph
@@ -130,6 +132,7 @@ class ProcurementGraphService:
         started = time.perf_counter()
         restored_analysis_query = GraphMemoryMapper.analysis_query(request)
         restored_pending_action = GraphMemoryMapper.pending_action(request)
+        restored_form_draft = GraphMemoryMapper.form_draft(request)
         initial: GraphState = {
             "task_id": str(request.task_id),
             "trace_id": request.trace_id,
@@ -167,6 +170,12 @@ class ProcurementGraphService:
                 restored_pending_action.model_dump(mode="json") if restored_pending_action else None
             ),
             "compose_output": None,
+            "form_draft": restored_form_draft or None,
+            "form_missing_fields": list(
+                request.restored_state.collected_data.get("form_missing_fields", [])
+                if request.restored_state
+                else []
+            ),
         }
         invoke_config = {
             "recursion_limit": max(15, self.settings.max_execution_steps + 8),
@@ -216,6 +225,8 @@ class ProcurementGraphService:
                 if final.get("pending_action")
                 else None
             ),
+            form_draft=final.get("form_draft"),
+            form_missing_fields=final.get("form_missing_fields", []),
         )
 
     def _build_graph(self):
@@ -293,6 +304,8 @@ class ProcurementGraphService:
                 route = self.router.classify(state["message"])
         else:
             route = self.router.classify(state["message"])
+        if state.get("form_draft") and state.get("form_missing_fields"):
+            route = RouteType.FORM_PREFILL
         requirement_id = None
         if route in {
             RouteType.REALTIME_BUSINESS,
@@ -456,25 +469,77 @@ class ProcurementGraphService:
         }
         return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
 
-
     async def _form_prefill_node(self, state: GraphState) -> dict[str, Any]:
         if state["step_count"] >= self.settings.max_execution_steps:
             return self._boundary_failure(state, "GRAPH_STEP_LIMIT", "已达到最大执行步骤")
-        pending = PendingAction(
-            action_type="SUBMIT_PURCHASE_REQUEST",
-            draft={"source_message": state["message"], "status": "DRAFT"},
+        draft = dict(state.get("form_draft") or {})
+        draft.update(self._extract_form_fields(state["message"]))
+        current_user = state["current_user"]
+        buildings = current_user.get("buildings", [])
+        if "building_id" not in draft and isinstance(buildings, list) and len(buildings) == 1:
+            building = buildings[0]
+            if isinstance(building, dict) and isinstance(building.get("building_id"), int):
+                draft["building_id"] = building["building_id"]
+                draft["building_name"] = building.get("building_name")
+        required = (
+            "building_id",
+            "device_profession",
+            "device_name",
+            "quantity",
+            "unit",
+            "application_reason",
+        )
+        missing = [field for field in required if draft.get(field) in (None, "")]
+        pending = (
+            PendingAction(action_type="CREATE_PURCHASE_DRAFT", draft=draft) if not missing else None
         )
         trace = TraceEvent(
             event_type=TraceEventType.GRAPH,
             name="form_prefill",
             status="DRAFTED",
-            result={"action_type": pending.action_type, "executed": False},
+            result={
+                "action_type": pending.action_type if pending else None,
+                "missing_fields": missing,
+                "executed": False,
+            },
         )
         return {
             "step_count": state["step_count"] + 1,
-            "pending_action": pending.model_dump(mode="json"),
+            "pending_action": pending.model_dump(mode="json") if pending else None,
+            "form_draft": draft,
+            "form_missing_fields": missing,
             "trace_events": [*state["trace_events"], trace.model_dump(mode="json")],
         }
+
+    @staticmethod
+    def _extract_form_fields(message: str) -> dict[str, Any]:
+        fields: dict[str, Any] = {}
+        normalized = re.sub(r"\s+", "", message)
+        device_map = {
+            "服务器": "算力服务器",
+            "交换机": "IDC网络",
+            "路由器": "IDC网络",
+            "防火墙": "IDC网络",
+            "UPS": "电气",
+        }
+        for device_name, profession in device_map.items():
+            if device_name.lower() in normalized.lower():
+                fields["device_name"] = device_name
+                fields["device_profession"] = profession
+                break
+        brand_match = re.search(r"(浪潮|华为|联想|戴尔|惠普|新华三|H3C)", normalized, re.IGNORECASE)
+        if brand_match:
+            fields["brand"] = brand_match.group(1)
+        quantity_match = re.search(r"(\d+(?:\.\d+)?)\s*(台|套|个|批|件)", message)
+        if quantity_match:
+            fields["quantity"] = float(quantity_match.group(1))
+            fields["unit"] = quantity_match.group(2)
+        reason_match = re.search(r"(?:原因|用途|用于|因为)[：:，,]?(.{2,200})", message)
+        if reason_match:
+            fields["application_reason"] = (
+                reason_match.group(1).lstrip("是为：:，, ").strip("。；; ")
+            )
+        return fields
 
     async def _sufficiency_node(self, state: GraphState) -> dict[str, Any]:
         route = RouteType(state["route"])
@@ -491,7 +556,7 @@ class ProcurementGraphService:
             RouteType.HYBRID: knowledge_ok and realtime_ok,
             RouteType.COMPLEX_QUERY: state.get("analysis") is not None,
             RouteType.RISK_INVESTIGATION: state.get("risk_investigation") is not None,
-            RouteType.FORM_PREFILL: state.get("pending_action") is not None,
+            RouteType.FORM_PREFILL: bool(state.get("form_draft")),
         }[route]
         trace = TraceEvent(
             event_type=TraceEventType.GRAPH,
@@ -652,7 +717,7 @@ class ProcurementGraphService:
         if requirement_id is None:
             error = GraphError(
                 code="PURCHASE_REQUEST_ID_REQUIRED",
-                message="请提供需要调查的采购申请 ID",
+                message="请提供采购单号，或用设备、时间和状态描述需要调查的申请",
                 source="risk_investigation",
             )
             return {
@@ -936,27 +1001,91 @@ class ProcurementGraphService:
 
     async def _realtime_query_node(self, state: GraphState) -> dict[str, Any]:
         await self._emit_stream("querying_business_data", {"message": "正在查询采购业务记录"})
-        source = "mcp://get_purchase_request"
         if state["step_count"] >= self.settings.max_execution_steps:
             return self._boundary_failure(state, "GRAPH_STEP_LIMIT", "已达到最大执行步骤")
         requirement_id = state.get("purchase_request_id")
         if requirement_id is None:
-            error = GraphError(
-                code="PURCHASE_REQUEST_ID_REQUIRED",
-                message="请提供采购申请 ID，例如：查询采购申请 91007 的当前状态",
-                source=source,
+            resolution_arguments = self._requirement_search_arguments(state["message"])
+            if not resolution_arguments:
+                error = GraphError(
+                    code="PURCHASE_REQUEST_ID_REQUIRED",
+                    message="请提供采购单号，或用设备、时间和状态描述这张申请",
+                    source="mcp://search_purchase_records",
+                )
+                trace = TraceEvent(
+                    event_type=TraceEventType.ERROR,
+                    name="resolve_purchase_reference",
+                    status="SKIPPED",
+                    error_code=error.code,
+                )
+                return {
+                    "step_count": state["step_count"] + 1,
+                    "errors": [*state["errors"], error.model_dump(mode="json")],
+                    "trace_events": [*state["trace_events"], trace.model_dump(mode="json")],
+                }
+            identity = BackendIdentity.model_validate(state["identity"])
+            resolution_started = time.perf_counter()
+            try:
+                async with self.mcp_client_factory(
+                    self.settings, identity, state["trace_id"]
+                ) as client:
+                    protected_client = CircuitProtectedMCPClient(client, self.mcp_circuit_breaker)
+                    resolved = await protected_client.call_tool(
+                        "search_purchase_records", resolution_arguments
+                    )
+            except MCPClientError as exc:
+                return self._tool_transport_failure(
+                    state, exc, resolution_arguments, resolution_started
+                )
+            resolution_execution = ToolExecution(
+                name="search_purchase_records",
+                arguments=resolution_arguments,
+                success=resolved.success,
+                code=resolved.code,
+                source=resolved.source,
+                trace_id=resolved.trace_id,
+                duration_ms=self._elapsed_ms(resolution_started),
+                data=resolved.data,
             )
-            trace = TraceEvent(
-                event_type=TraceEventType.ERROR,
-                name="get_purchase_request",
-                status="SKIPPED",
-                error_code=error.code,
+            items = (
+                resolved.data.get("items", [])
+                if resolved.success and isinstance(resolved.data, dict)
+                else []
             )
-            return {
-                "step_count": state["step_count"] + 1,
-                "errors": [*state["errors"], error.model_dump(mode="json")],
-                "trace_events": [*state["trace_events"], trace.model_dump(mode="json")],
+            resolution_trace = TraceEvent(
+                event_type=TraceEventType.TOOL,
+                name="search_purchase_records",
+                status="SUCCESS" if resolved.success else "FAILED",
+                duration_ms=resolution_execution.duration_ms,
+                arguments=resolution_arguments,
+                result={"match_count": len(items)},
+                error_code=None if resolved.success else resolved.code,
+            )
+            resolution_evidence = Evidence(
+                evidence_type="MCP_TOOL_RESULT",
+                source=resolved.source,
+                reference_id="purchase_candidates",
+                data=resolved.data,
+            )
+            state = {
+                **state,
+                "tool_call_count": state["tool_call_count"] + 1,
+                "tool_results": [
+                    *state["tool_results"],
+                    resolution_execution.model_dump(mode="json"),
+                ],
+                "trace_events": [*state["trace_events"], resolution_trace.model_dump(mode="json")],
+                "evidence": [*state["evidence"], resolution_evidence.model_dump(mode="json")],
             }
+            if len(items) != 1:
+                return {
+                    "step_count": state["step_count"] + 1,
+                    "tool_call_count": state["tool_call_count"],
+                    "tool_results": state["tool_results"],
+                    "trace_events": state["trace_events"],
+                    "evidence": state["evidence"],
+                }
+            requirement_id = int(items[0]["requirement_id"])
         if state["tool_call_count"] >= self.settings.max_tool_calls:
             return self._boundary_failure(
                 state,
@@ -1030,6 +1159,38 @@ class ProcurementGraphService:
             )
             updates["errors"] = [*state["errors"], error.model_dump(mode="json")]
         return updates
+
+    @staticmethod
+    def _requirement_search_arguments(message: str) -> dict[str, Any]:
+        arguments: dict[str, Any] = {"page": 1, "page_size": 10}
+        requirement_no = re.search(
+            r"(?<![A-Z0-9])((?:TEST-)?PR-[A-Z0-9-]{2,}|TEST-PR-[A-Z0-9-]+)",
+            message.upper(),
+        )
+        if requirement_no:
+            arguments["requirement_no"] = requirement_no.group(1)
+        for device in ("服务器", "交换机", "路由器", "存储", "防火墙", "机柜", "UPS"):
+            if device.lower() in message.lower():
+                arguments["device_name"] = device
+                break
+        status_map = {
+            "草稿": "DRAFT",
+            "待审批": "PENDING_REVIEW",
+            "已驳回": "REJECTED",
+            "待采购": "PENDING_PURCHASE",
+            "采购中": "PURCHASING",
+            "待入库": "PENDING_WAREHOUSE",
+            "已完成": "COMPLETED",
+        }
+        for label, status in status_map.items():
+            if label in message:
+                arguments["status"] = status
+                break
+        if "昨天" in message:
+            target = date.today() - timedelta(days=1)
+            arguments["created_from"] = target.isoformat()
+            arguments["created_to"] = target.isoformat()
+        return arguments if len(arguments) > 2 else {}
 
     async def _answer_node(self, state: GraphState) -> dict[str, Any]:
         await self._emit_stream("analyzing", {"message": "正在整理查询结果"})
@@ -1147,9 +1308,25 @@ class ProcurementGraphService:
         if route is RouteType.COMPLEX_QUERY and state.get("analysis"):
             return AnalysisOutput.model_validate(state["analysis"]).answer
         if route is RouteType.FORM_PREFILL:
+            missing = state.get("form_missing_fields", [])
+            if missing:
+                labels = {
+                    "building_id": "所属楼宇",
+                    "device_profession": "设备类型",
+                    "device_name": "设备名称",
+                    "quantity": "数量",
+                    "unit": "单位",
+                    "application_reason": "采购原因",
+                }
+                names = "、".join(labels.get(item, item) for item in missing)
+                return (
+                    "我已记录你提供的采购信息，并建立了未提交的申请草稿。\n\n"
+                    f"**还需要补充：{names}。**\n\n"
+                    "请直接告诉我缺少的信息；已记录的内容无需重复填写。"
+                )
             return (
-                "已根据当前消息生成采购申请预填草稿，但尚未提交。"
-                "提交采购申请属于正式业务动作，必须由你人工确认后再调用采购后端。"
+                "采购申请草稿已经整理完成。请先核对下方字段；如需修改，直接告诉我。\n\n"
+                "**确认无误后再点击“创建草稿”。这一步只会在业务系统中创建草稿，不会提交审批。**"
             )
         knowledge_reply = self._knowledge_answer(state)
         realtime_reply = self._realtime_answer(state)
@@ -1182,7 +1359,7 @@ class ProcurementGraphService:
                 return f"暂时无法完成风险调查：{error.message}。本次不形成风险结论。"
         if route is RouteType.COMPLEX_QUERY:
             return "分析工具未返回可确认的数据，本次不会猜测结果。"
-        return "请提供需要调查的采购申请 ID。"
+        return "请提供采购单号，或描述设备、时间和当前状态，我会帮你定位。"
 
     @staticmethod
     def _knowledge_answer(state: GraphState) -> str | None:
@@ -1191,18 +1368,8 @@ class ProcurementGraphService:
         result = RetrievalResult.model_validate(state["knowledge"])
         if not result.answerable:
             return None
-        parts = ["根据当前用户可见的知识库证据："]
-        for item in result.evidences:
-            citation = item.citation
-            parts.append(f"{item.context_content} [{citation.citation_id}]")
-        parts.append("来源：")
-        for citation in result.citations:
-            section = " > ".join(citation.section_path)
-            parts.append(
-                f"[{citation.citation_id}] {citation.document_title} v{citation.version} / "
-                f"{section}（{citation.source_path}:{citation.source_start_line}）"
-            )
-        return "\n".join(parts)
+        statements = [item.context_content.strip() for item in result.evidences]
+        return "\n\n".join(item for item in statements if item)
 
     @staticmethod
     def _realtime_answer(state: GraphState) -> str | None:
@@ -1214,6 +1381,11 @@ class ProcurementGraphService:
         if not successful:
             return None
         execution = successful[-1]
+        if execution.name == "search_purchase_records" and isinstance(execution.data, dict):
+            total = int(execution.data.get("total", 0))
+            if total == 0:
+                return "没有找到符合描述的采购申请。请补充设备、时间或当前状态后再试。"
+            return f"找到 {total} 条可能匹配的采购申请，请从下方结果中选择要查看的一条。"
         if execution.name != "get_purchase_request" or not isinstance(execution.data, dict):
             return None
         data = execution.data

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import RoleCode
 from app.domain.identity import CurrentUser
-from app.models.identity import Building
+from app.models.identity import Building, Employee
 from app.models.procurement import (
     PurchaseExecution,
     PurchaseOperationLog,
@@ -30,6 +30,7 @@ class AnalysisRow:
     proposed_supplier_id: int | None
     proposed_supplier_name: str | None
     estimated_unit_price: Decimal | None
+    current_handler_name: str | None = None
 
     @property
     def supplier_id(self) -> int | None:
@@ -72,7 +73,7 @@ class AnalyticsRepository:
             PurchaseRequest.created_at >= datetime.combine(created_from, time.min),
             PurchaseRequest.created_at < datetime.combine(created_to + timedelta(days=1), time.min),
         )
-        statement = self._apply_filters(statement, payload)
+        statement = self._apply_filters(statement, payload, employee_id=current_user.employee_id)
         statement = self._apply_sort(statement, payload).limit(limit)
         return self._rows(await session.execute(statement))
 
@@ -158,6 +159,12 @@ class AnalyticsRepository:
             .correlate(PurchaseRequest)
             .scalar_subquery()
         )
+        current_handler_name = (
+            select(Employee.name)
+            .where(Employee.employee_id == PurchaseRequest.current_handler_employee_id)
+            .correlate(PurchaseRequest)
+            .scalar_subquery()
+        )
         statement = (
             select(
                 PurchaseRequest,
@@ -168,6 +175,7 @@ class AnalyticsRepository:
                 proposed_supplier_id,
                 proposed_supplier_name,
                 estimated_unit_price,
+                current_handler_name,
             )
             .join(Building, Building.building_id == PurchaseRequest.building_id)
             .outerjoin(
@@ -183,7 +191,9 @@ class AnalyticsRepository:
         return statement.where(visibility) if visibility is not None else statement
 
     @staticmethod
-    def _apply_filters(statement: Select, payload: PurchaseQueryRequest) -> Select:
+    def _apply_filters(
+        statement: Select, payload: PurchaseQueryRequest, *, employee_id: int
+    ) -> Select:
         proposed_supplier_id = (
             select(PurchaseReview.proposed_supplier_id)
             .where(PurchaseReview.request_id == PurchaseRequest.request_id)
@@ -204,6 +214,8 @@ class AnalyticsRepository:
             PurchaseExecution.actual_unit_price,
             estimated_unit_price,
         )
+        if payload.created_by_me:
+            statement = statement.where(PurchaseRequest.applicant_employee_id == employee_id)
         if payload.building_ids:
             statement = statement.where(PurchaseRequest.building_id.in_(payload.building_ids))
         if payload.device_professions:
@@ -276,6 +288,7 @@ class AnalyticsRepository:
                 proposed_supplier_id=row[5],
                 proposed_supplier_name=row[6],
                 estimated_unit_price=row[7],
+                current_handler_name=row[8],
             )
             for row in result.all()
         ]

@@ -78,6 +78,61 @@ async def cleanup_conversation(conversation_id: int) -> None:
             )
 
 
+@pytest.mark.asyncio
+async def test_external_conversations_are_distinct_listed_and_restore_message_data() -> None:
+    created_ids: list[int] = []
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        try:
+            for suffix in ("A", "B"):
+                response = await call(
+                    client,
+                    "POST",
+                    "/api/v1/agent/conversations/active",
+                    "test-user-01",
+                    json={
+                        "current_action": "CHAT",
+                        "external_conversation_id": f"TEST-CHAT-{suffix}-{uuid4().hex}",
+                    },
+                )
+                assert response.status_code == 200, response.text
+                created_ids.append(response.json()["data"]["conversation_id"])
+            assert created_ids[0] != created_ids[1]
+
+            message_data = {
+                "route": "REALTIME_BUSINESS",
+                "business_results": [{"kind": "PURCHASE_REQUIREMENTS", "items": []}],
+            }
+            stored = await call(
+                client,
+                "POST",
+                f"/api/v1/agent/conversations/{created_ids[0]}/messages",
+                "test-user-01",
+                json={
+                    "sender_type": "AGENT",
+                    "content": "已找到采购申请。",
+                    "message_data": message_data,
+                },
+            )
+            assert stored.status_code == 200, stored.text
+
+            listed = await call(client, "GET", "/api/v1/agent/conversations", "test-user-01")
+            assert listed.status_code == 200, listed.text
+            listed_ids = {item["conversation_id"] for item in listed.json()["data"]["items"]}
+            assert set(created_ids).issubset(listed_ids)
+
+            restored = await call(
+                client,
+                "GET",
+                f"/api/v1/agent/conversations/{created_ids[0]}/messages",
+                "test-user-01",
+            )
+            assert restored.status_code == 200, restored.text
+            assert restored.json()["data"]["items"][0]["message_data"] == message_data
+        finally:
+            for conversation_id in created_ids:
+                await cleanup_conversation(conversation_id)
+
+
 @pytest.fixture(autouse=True)
 async def reset_demo_data() -> None:
     await engine.dispose()

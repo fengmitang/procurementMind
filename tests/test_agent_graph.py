@@ -115,6 +115,10 @@ def test_first_router_distinguishes_five_routes(message: str, expected: RouteTyp
     assert FirstVersionRouter().classify(message) is expected
 
 
+def test_router_recognizes_natural_purchase_draft_intent() -> None:
+    assert FirstVersionRouter().classify("我要采购一批浪潮服务器") is RouteType.FORM_PREFILL
+
+
 def test_explicit_knowledge_question_skips_slow_model_router() -> None:
     router = FirstVersionRouter()
 
@@ -209,7 +213,8 @@ async def test_graph_requests_missing_id_without_calling_tool() -> None:
     result = await service.run(request("查询当前采购单状态"))
 
     assert result.errors[0].code == "PURCHASE_REQUEST_ID_REQUIRED"
-    assert "请提供采购申请 ID" in result.reply
+    assert "请提供采购单号" in result.reply
+    assert "ID" not in result.reply
     assert result.tool_call_count == 0
     assert mcp.calls == []
 

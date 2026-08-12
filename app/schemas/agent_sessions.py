@@ -20,6 +20,7 @@ class CreateMessageRequest(BaseModel):
     external_message_id: str | None = Field(default=None, max_length=150)
     sender_type: str
     content: str = Field(min_length=1)
+    message_data: dict[str, Any] | None = None
 
     @field_validator("sender_type")
     @classmethod
@@ -35,7 +36,25 @@ class MessageData(BaseModel):
     external_message_id: str | None
     sender_type: str
     content: str
+    message_data: dict[str, Any] | None = None
     created_at: datetime
+
+
+class ConversationData(BaseModel):
+    conversation_id: int
+    external_conversation_id: str | None
+    status: str
+    title: str
+    message_count: int
+    started_at: datetime
+    last_active_at: datetime
+
+
+class ConversationListData(BaseModel):
+    items: list[ConversationData]
+    page: int
+    page_size: int
+    total: int
 
 
 class MessageCreatedData(BaseModel):

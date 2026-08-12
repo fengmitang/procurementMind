@@ -384,8 +384,14 @@ async def test_complete_procurement_flow_with_rejection_and_resubmission() -> No
             detail_data = detail.json()["data"]
             assert detail_data["status"] == "COMPLETED"
             assert len(detail_data["review_records"]) == 2
+            assert [item["review_round"] for item in detail_data["review_records"]] == [1, 2]
+            assert all(item["reviewer_name"] for item in detail_data["review_records"])
+            assert detail_data["initiator"]["name"]
+            assert detail_data["initiator"]["created_at"]
             assert detail_data["warehouse_receipt"]["received_quantity"] == "4.000"
+            assert detail_data["warehouse_receipt"]["warehouse_name"]
             assert detail_data["purchase_execution"]["bank_account"] == "TEST****2001"
+            assert detail_data["purchase_execution"]["purchaser_name"]
             assert detail_data["purchase_execution"]["purchased_at"] == "2026-08-03T14:30:00"
 
             listed = await call(

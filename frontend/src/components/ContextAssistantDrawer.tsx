@@ -17,7 +17,7 @@ import type {
   AgentFormSuggestion,
   AgentMessage,
   AgentUIContext,
-  Citation,
+  KnowledgeSource,
 } from '../types/api'
 import './ContextAssistantDrawer.css'
 
@@ -54,8 +54,8 @@ const rolePrompts = {
   ],
 } as const
 
-function citations(data?: AgentChatData): Citation[] {
-  return data?.knowledge?.citations || data?.knowledge?.evidence || []
+function citations(data?: AgentChatData): KnowledgeSource[] {
+  return data?.knowledge_sources || []
 }
 
 function candidateSuggestions(data?: AgentChatData): AgentFormSuggestion[] {
@@ -169,7 +169,7 @@ export function ContextAssistantDrawer({
       type="info"
       showIcon
       title="采购事实将从业务系统重新查询"
-      description="页面仅向 Agent 提供当前采购单编号；未提交草稿会明确作为草稿处理。"
+      description="已关联当前采购单上下文；未提交草稿会明确作为草稿处理。"
     />
     {!messages.length && <Prompts
       title="快捷问题"
@@ -192,9 +192,9 @@ export function ContextAssistantDrawer({
             {citations(item.data).length > 0 && <Sources
               title={`知识来源（${citations(item.data).length}）`}
               items={citations(item.data).map((source, index) => ({
-                key: source.citation_id || index,
+                key: index,
                 title: source.title || `来源 ${index + 1}`,
-                description: Array.isArray(source.section_path) ? source.section_path.join(' / ') : source.section_path,
+                description: source.section_path.join(' / '),
               }))}
             />}
             {candidateSuggestions(item.data).map((suggestion, index) => <Card

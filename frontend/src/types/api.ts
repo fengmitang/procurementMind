@@ -51,6 +51,7 @@ export interface RequirementDetail {
   version: number
   building: Record<string, any>
   current_handler: Record<string, any> | null
+  initiator: Record<string, any>
   applicant_fields: ApplicantFields
   review_records: Record<string, any>[]
   purchase_execution: Record<string, any> | null
@@ -146,6 +147,33 @@ export interface Citation {
   [key: string]: any
 }
 
+export interface KnowledgeSource { title: string; section_path: string[] }
+export interface BusinessResult {
+  kind: 'PURCHASE_REQUIREMENTS' | 'SUPPLIERS' | 'PURCHASE_HISTORY'
+  title: string
+  items: Record<string, any>[]
+  total?: number | null
+}
+
+export interface AgentConversationSummary {
+  conversation_id: number
+  external_conversation_id: string | null
+  status: string
+  title: string
+  message_count: number
+  started_at: string
+  last_active_at: string
+}
+
+export interface AgentStoredMessage {
+  message_id: number
+  external_message_id: string | null
+  sender_type: 'USER' | 'AGENT' | 'SYSTEM'
+  content: string
+  message_data?: Partial<AgentChatData> | null
+  created_at: string
+}
+
 export interface PendingAction {
   action_id: string
   confirmation_token: string
@@ -166,6 +194,10 @@ export interface AgentChatData {
   tool_call_count: number
   evidence_count: number
   knowledge?: { citations?: Citation[]; evidence?: Citation[]; [key: string]: any } | null
+  knowledge_sources?: KnowledgeSource[]
+  business_results?: BusinessResult[]
+  form_draft?: Record<string, any> | null
+  form_missing_fields?: string[]
   analysis?: Record<string, any> | null
   risk_investigation?: Record<string, any> | null
   review?: Record<string, any> | null

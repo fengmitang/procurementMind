@@ -68,6 +68,7 @@ class AgentMessage(Base):
     external_message_id: Mapped[str | None] = mapped_column(String(150), nullable=True)
     sender_type: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    message_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

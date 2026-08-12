@@ -15,6 +15,7 @@ from agent_app.rag.models import (
     LocalRAGModels,
     get_local_rag_models,
     initialize_local_rag_models,
+    initialize_rag_providers,
 )
 from scripts.download_rag_models import ensure_external_directory
 
@@ -42,6 +43,8 @@ def test_rag_paths_and_device_are_explicit_settings(tmp_path: Path) -> None:
     value = settings(
         embedding_model_path=embedding,
         reranker_model_path=reranker,
+        rag_embedding_provider="local_bge",
+        rag_rerank_provider="local_bge",
         rag_model_device="cpu",
     )
 
@@ -102,6 +105,19 @@ def test_all_supported_device_modes_are_valid_configuration(device: str) -> None
     assert settings(rag_model_device=device).rag_model_device == device
 
 
+def test_bailian_rag_configuration_reuses_existing_llm_credentials() -> None:
+    value = settings(
+        model_api_key="credential-placeholder",
+        model_base_url="https://workspace.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+    )
+
+    assert value.rag_models_configured is True
+    assert value.resolved_rag_api_key is value.model_api_key
+    assert value.resolved_rag_bailian_base_url == value.model_base_url
+    assert value.rag_embedding_model == "qwen3.7-text-embedding"
+    assert value.rag_rerank_model == "qwen3-rerank"
+
+
 def test_auto_device_can_resolve_to_cpu(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -156,6 +172,46 @@ def test_process_cache_reuses_same_model_service(tmp_path: Path) -> None:
     assert first is second
 
 
+def test_provider_factory_supports_full_local_bge_switch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    embedding_path, reranker_path = model_directories(tmp_path)
+
+    class FakeEmbedding:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def encode(self, texts: list[str], **_kwargs: object) -> dict:
+            return {"dense_vecs": [[1.0, 0.0] for _ in texts]}
+
+    class FakeReranker:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def compute_score(self, pairs: list[list[str]], **_kwargs: object) -> list[float]:
+            return [0.9 for _ in pairs]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "FlagEmbedding",
+        SimpleNamespace(BGEM3FlagModel=FakeEmbedding, FlagReranker=FakeReranker),
+    )
+    providers = initialize_rag_providers(
+        settings(
+            embedding_model_path=embedding_path,
+            reranker_model_path=reranker_path,
+            rag_embedding_provider="local_bge",
+            rag_rerank_provider="local_bge",
+            rag_model_device="cpu",
+        )
+    )
+
+    assert providers is not None
+    assert providers.encode_dense(["采购规则"]) == [[1.0, 0.0]]
+    assert providers.rerank("采购", ["采购规则"]) == [0.9]
+
+
 @pytest.mark.asyncio
 async def test_service_lifespan_initializes_local_models_once(
     tmp_path: Path,
@@ -165,6 +221,8 @@ async def test_service_lifespan_initializes_local_models_once(
     configured_settings = settings(
         embedding_model_path=embedding,
         reranker_model_path=reranker,
+        rag_embedding_provider="local_bge",
+        rag_rerank_provider="local_bge",
         rag_model_device="cpu",
     )
     sentinel = SimpleNamespace(name="local-rag-models")
@@ -176,7 +234,7 @@ async def test_service_lifespan_initializes_local_models_once(
         calls += 1
         return sentinel
 
-    monkeypatch.setattr(agent_main, "initialize_local_rag_models", fake_initialize)
+    monkeypatch.setattr(agent_main, "initialize_rag_providers", fake_initialize)
     application = agent_main.create_agent_app(
         configured_settings,
         procurement_backend_client=SimpleNamespace(),
@@ -201,4 +259,6 @@ def test_environment_example_declares_local_rag_model_contract() -> None:
     assert "EMBEDDING_MODEL_PATH=F:/AIModels/bge-m3" in content
     assert "RERANKER_MODEL_PATH=F:/AIModels/bge-reranker-v2-m3" in content
     assert "RAG_MODEL_DEVICE=cpu" in content
-    assert "EMBEDDING_MODEL=" not in content
+    assert "\nEMBEDDING_MODEL=" not in content
+    assert "RAG_EMBEDDING_PROVIDER=aliyun_bailian" in content
+    assert "RAG_RERANK_PROVIDER=aliyun_bailian" in content

@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from typing import Protocol
 
@@ -34,6 +35,7 @@ class StructuredModelRequest(BaseModel):
     response_schema: dict[str, JsonValue]
     temperature: float = Field(default=0, ge=0, le=2)
     max_output_tokens: int = Field(default=2000, ge=1, le=32000)
+    enable_thinking: bool | None = None
 
 
 class ModelUsage(BaseModel):
@@ -72,6 +74,29 @@ class StructuredModelResponse(BaseModel):
     usage: ModelUsage = Field(default_factory=ModelUsage)
     latency_ms: int = Field(ge=0)
     request_id: str | None = None
+    primary_model: str | None = None
+    actual_model: str | None = None
+    fallback_used: bool = False
+    fallback_reason: str | None = None
+    response_headers_ms: int | None = Field(default=None, ge=0)
+    first_token_ms: int | None = Field(default=None, ge=0)
+    transport_read_ms: int | None = Field(default=None, ge=0)
+    response_parse_ms: int = Field(default=0, ge=0)
+    schema_validation_ms: int = Field(default=0, ge=0)
+    runner_latency_ms: int | None = Field(default=None, ge=0)
+    retry_overhead_ms: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def populate_runtime_model_metadata(self) -> "StructuredModelResponse":
+        if self.primary_model is None:
+            self.primary_model = self.model
+        if self.actual_model is None:
+            self.actual_model = self.model
+        if self.fallback_used and not self.fallback_reason:
+            raise ValueError("fallback_used=true 时必须提供 fallback_reason")
+        if not self.fallback_used and self.fallback_reason is not None:
+            raise ValueError("未使用 fallback 时不能提供 fallback_reason")
+        return self
 
 
 class ModelAdapterError(RuntimeError):
@@ -86,4 +111,15 @@ class StructuredModelAdapter(Protocol):
     async def complete_structured(
         self,
         request: StructuredModelRequest,
+    ) -> StructuredModelResponse: ...
+
+
+ModelDeltaHandler = Callable[[str], Awaitable[None]]
+
+
+class StreamingStructuredModelAdapter(StructuredModelAdapter, Protocol):
+    async def complete_structured_stream(
+        self,
+        request: StructuredModelRequest,
+        delta_handler: ModelDeltaHandler,
     ) -> StructuredModelResponse: ...

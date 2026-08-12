@@ -121,8 +121,10 @@ async def list_requirements(
         "PENDING_FOR_ME",
         "PROCESSED_BY_ME",
         "BUILDING_SCOPE",
+        "ADMIN_SCOPE",
     ] = Query(),
     status: str | None = Query(default=None),
+    keyword: str | None = Query(default=None, min_length=1, max_length=200),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[RequirementListData]:
@@ -131,6 +133,7 @@ async def list_requirements(
         current_user,
         view=view,
         status=status,
+        keyword=keyword,
         page=page,
         page_size=page_size,
     )

@@ -126,8 +126,31 @@ RAG 的本地模型、文档切分、索引、混合检索、引用、Trace 和�
 ```dotenv
 EMBEDDING_MODEL_PATH=F:/AIModels/bge-m3
 RERANKER_MODEL_PATH=F:/AIModels/bge-reranker-v2-m3
+RAG_EMBEDDING_PROVIDER=aliyun_bailian
+RAG_RERANK_PROVIDER=aliyun_bailian
+RAG_EMBEDDING_MODEL=qwen3.7-text-embedding
+RAG_RERANK_MODEL=qwen3-rerank
 RAG_MODEL_DEVICE=cpu
+QDRANT_COLLECTION=procurement_knowledge_child_qwen37
 ```
+
+开发环境默认通过阿里百炼调用 Embedding 与 Rerank。RAG 默认复用 `MODEL_API_KEY` 和
+`MODEL_BASE_URL`；如需单独凭证或业务空间地址，可设置 `RAG_API_KEY` 和
+`RAG_BAILIAN_BASE_URL`。Key 只允许保存在本机 `.env` 或部署密钥系统中。
+
+切回本地 BGE 时设置：
+
+```dotenv
+RAG_EMBEDDING_PROVIDER=local_bge
+RAG_RERANK_PROVIDER=local_bge
+QDRANT_COLLECTION=procurement_knowledge_child
+RAG_EMBEDDING_BATCH_SIZE=4
+RAG_RERANK_MIN_SCORE=0.2
+```
+
+切换 Embedding Provider 后必须为目标 Provider 使用独立 collection 并执行全量索引重建；即使
+向量维度同为 1024，也禁止混用不同模型的 Dense 向量。旧 BGE collection 会保留，可在切回本地
+Provider 后复用并按需重建。
 
 重新下载或校验模型时运行：
 
@@ -138,7 +161,8 @@ RAG_MODEL_DEVICE=cpu
 
 下载脚本使用 `huggingface_hub.snapshot_download()`，模型和 Hugging Face 下载缓存都限制在
 `F:/AIModels`，并拒绝把目标目录设在项目内部。Agent 服务只从本地路径加载；配置完整时在
-服务启动阶段初始化一次，后续请求复用同一组模型实例。Embedding 和 Reranker 使用独立封装，
+本地 Provider 在服务启动阶段初始化一次，后续请求复用同一组模型实例。Embedding 和 Reranker
+使用独立 Provider 封装，
 上层不直接依赖 FlagEmbedding API。缺少任一模型路径、本地模型文件不完整或加载失败时，服务会
 明确失败，不会静默联网下载或切换远程模型。本机 `.env` 明确设置为 `cpu`，因此当前验证和
 运行不会使用 GPU。离线交付时可直接复制两个模型目录到目标服务器，并通过环境变量改为目标
@@ -157,7 +181,7 @@ Qdrant 固定使用单节点持久化部署，不使用 Cloud 或集群。Child 
 
 知识库以 `knowledge/source/` 下 7 份独立 Markdown 为唯一源文件。同步程序优先按文档元数据、
 Markdown 标题层级和业务语义边界生成 Parent-Child；Child 的 Embedding 文本包含文档标题、章节
-路径、主题和正文，并同时写入本地 BGE-M3 Dense 向量及 Qdrant 原生多语言 BM25 Sparse 向量。
+路径、主题和正文，并同时写入当前 Provider 的 Dense 向量及 Qdrant 原生多语言 BM25 Sparse 向量。
 全量构建和单文档增量同步分别执行：
 
 ```powershell
@@ -170,7 +194,7 @@ MySQL Parent 和 Qdrant Child，不删除整个数据库或 collection；异常�
 即可重试。`--all` 还会将源目录中已删除的文档标记为 `RETIRED` 并清理其索引。
 
 知识检索使用 Qdrant 当前 Query API：Dense 与多语言 BM25 各自召回后由服务端 RRF 融合，再由
-本地 `bge-reranker-v2-m3` 精排。默认召回数量、RRF 参数、精排数量、Parent 和总上下文预算均由
+配置选择的 `qwen3-rerank` 或本地 `bge-reranker-v2-m3` 精排。默认召回数量、RRF 参数、精排数量、Parent 和总上下文预算均由
 `RAG_DENSE_TOP_K`、`RAG_SPARSE_TOP_K`、`RAG_FUSION_TOP_K`、`RAG_RERANK_TOP_K`、
 `RAG_RRF_K`、`RAG_PARENT_MAX_CHARS` 和 `RAG_CONTEXT_MAX_CHARS` 配置。检索调用必须提供角色，
 并始终只读取 `ACTIVE` Child 和 `READY` Parent；设备范围为空时只允许全局知识。可用真实本地模型

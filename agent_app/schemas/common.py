@@ -24,4 +24,10 @@ class HealthData(BaseModel):
 class ReadinessData(BaseModel):
     status: Literal["ready", "not_ready"]
     procurement_backend: Literal["ok", "error"]
-    model: Literal["configured", "not_configured"]
+    model: Literal[
+        "not_configured",
+        "initializing",
+        "ready",
+        "provider_not_registered",
+        "initialization_failed",
+    ]

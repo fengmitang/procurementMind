@@ -74,6 +74,14 @@ class KnowledgeSyncService:
         self.repository = repository or KnowledgeRepository()
         self.embedding_batch_size = embedding_batch_size
         self.embedding_max_length = embedding_max_length
+        provider_identity = getattr(
+            embedding_provider,
+            "embedding_cache_identity",
+            type(embedding_provider).__name__,
+        )
+        contract = getattr(qdrant_store, "contract", None)
+        collection_name = getattr(contract, "collection_name", type(qdrant_store).__name__)
+        self.index_identity = f"{provider_identity}|collection={collection_name}"
 
     async def sync_document(
         self,
@@ -143,6 +151,7 @@ class KnowledgeSyncService:
                 and existing.content_hash == parsed.document.content_hash
                 and existing.index_status == "READY"
                 and existing.status == parsed.document.status
+                and (existing.metadata_json or {}).get("_rag_index_identity") == self.index_identity
             )
 
     async def _save_indexing_snapshot(self, parsed: ParsedKnowledgeDocument) -> None:
@@ -212,8 +221,7 @@ class KnowledgeSyncService:
             )
         return results
 
-    @staticmethod
-    def _apply_document(model: KnowledgeDocument, parsed: ParsedKnowledgeDocument) -> None:
+    def _apply_document(self, model: KnowledgeDocument, parsed: ParsedKnowledgeDocument) -> None:
         record = parsed.document
         model.title = record.title
         model.document_type = record.document_type
@@ -224,7 +232,10 @@ class KnowledgeSyncService:
         model.effective_at = record.effective_at
         model.allowed_roles = record.allowed_roles
         model.device_scopes = record.device_scopes
-        model.metadata_json = record.metadata
+        model.metadata_json = {
+            **(record.metadata or {}),
+            "_rag_index_identity": self.index_identity,
+        }
         model.index_status = "INDEXING"
         model.index_error = None
 

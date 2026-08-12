@@ -1,9 +1,13 @@
 import json
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
 from agent_app.analysis.schemas import AnalysisPlan
+from agent_app.models.json_stream import JsonStringFieldDeltaExtractor
 from agent_app.models.protocols import (
     ModelMessage,
     ModelPurpose,
@@ -20,13 +24,62 @@ from agent_app.models.runner import StructuredModelRunError, StructuredModelRunn
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
 
+_ROLE_MAX_OUTPUT_TOKENS: dict[ModelPurpose, int] = {
+    ModelPurpose.ROUTER: 256,
+    ModelPurpose.QUERY_REWRITE: 256,
+    ModelPurpose.ANALYSIS_PLAN: 1200,
+    ModelPurpose.ANALYSIS_REPLAN: 1200,
+    ModelPurpose.COMPOSE: 1200,
+    ModelPurpose.REVIEW: 800,
+}
+_ROLE_THINKING: dict[ModelPurpose, bool | None] = {
+    ModelPurpose.ROUTER: False,
+    ModelPurpose.QUERY_REWRITE: False,
+    ModelPurpose.ANALYSIS_PLAN: None,
+    ModelPurpose.ANALYSIS_REPLAN: None,
+    ModelPurpose.COMPOSE: False,
+    ModelPurpose.REVIEW: False,
+}
+
 
 class StructuredModelRoles:
     """Provider-neutral structured entry points for the five model roles."""
 
-    def __init__(self, runner: StructuredModelRunner, trace_id: str) -> None:
+    def __init__(
+        self,
+        runner: StructuredModelRunner,
+        trace_id: str,
+        *,
+        performance_optimizations_enabled: bool = True,
+    ) -> None:
         self.runner = runner
         self.trace_id = trace_id
+        self.performance_optimizations_enabled = performance_optimizations_enabled
+        self._trace_id_context: ContextVar[str] = ContextVar(
+            f"model_trace_id_{id(self)}", default=trace_id
+        )
+        self._call_metadata: ContextVar[dict[ModelPurpose, dict[str, Any]] | None] = ContextVar(
+            f"model_call_metadata_{id(self)}", default=None
+        )
+
+    @property
+    def cache_identity(self) -> str:
+        return f"{self.runner.primary_model or 'configured-model'}|role-prompts-v2"
+
+    def trace_metadata(self, purpose: ModelPurpose) -> dict[str, Any] | None:
+        values = self._call_metadata.get() or {}
+        value = values.get(purpose)
+        return dict(value) if value else None
+
+    @contextmanager
+    def bind_trace_id(self, trace_id: str) -> Iterator[None]:
+        trace_token = self._trace_id_context.set(trace_id)
+        metadata_token = self._call_metadata.set({})
+        try:
+            yield
+        finally:
+            self._call_metadata.reset(metadata_token)
+            self._trace_id_context.reset(trace_token)
 
     async def route(self, message: str) -> RouterOutput:
         output, _, _ = await self._run(
@@ -35,6 +88,11 @@ class StructuredModelRoles:
             (
                 "你是采购协同 Router。只按 Schema 分类，不回答问题。实时状态、处理人、价格、"
                 "采购记录、供应商、黑名单和统计必须标记需要实时工具；制度和操作规则需要知识库。"
+                "单条记录或单个对象的直接查询使用 REALTIME_BUSINESS；聚合统计、趋势、对比、"
+                "归因或需要多步骤工具组合的分析必须使用 COMPLEX_QUERY。用户声称某张采购单当前"
+                "处于某状态，不得把该说法当成权威事实；只要问题涉及‘这张/当前采购单’的实际状态，"
+                "就必须使用实时工具。若同时询问该状态下接下来怎么处理、适用什么流程或规则，必须"
+                "路由到 HYBRID，同时使用实时工具和知识库。"
             ),
             {"message": message},
         )
@@ -65,7 +123,14 @@ class StructuredModelRoles:
             AnalysisPlan,
             (
                 "你是采购分析 Planner。只能输出给定 Schema 和其中的只读工具枚举；禁止 SQL、URL、"
-                "身份字段和业务写操作。参数只能来自问题或已确认的结构化上下文。"
+                "身份字段和业务写操作。参数只能来自问题或已确认的结构化上下文。聚合统计、趋势、"
+                "分组和金额分析只使用 query_purchase_analytics，arguments 必须且只能包含 query；"
+                '正确格式示例："tool":"query_purchase_analytics","arguments":{"query":'
+                '{"group_by":"BUILDING","aggregations":["COUNT","TOTAL_AMOUNT"],'
+                '"page":1,"page_size":20}}。'
+                "get_supplier_performance、get_similar_cases、"
+                "get_requirement_risk_signals 只有在问题明确提供对应正整数 ID 时才能使用，"
+                "禁止编造 ID。query_context 应与分析查询条件一致。"
             ),
             {"message": message, "confirmed_context": confirmed_context},
         )
@@ -78,14 +143,21 @@ class StructuredModelRoles:
         *,
         allowed_citation_ids: set[str],
     ) -> ComposeOutput:
-        output, _, attempts = await self._run(
+        output, response, attempts = await self._run(
             ModelPurpose.COMPOSE,
             ComposeOutput,
             (
                 "你是采购协同 Compose。只能依据给出的可见证据回答；不得把建议写成事实，不得生成"
-                "未提供的引用。正式业务动作只能说明需要人工确认。"
+                "未提供的引用。citations 只能使用 allowed_citation_ids 中的知识库引用；如果该列表"
+                "为空，citations 必须为空。Tool 实时事实直接陈述来源，不得伪造 K 编号。正式业务"
+                "动作只能说明需要人工确认。不得向用户展示 snake_case 字段名、数据库主键或"
+                "英文状态枚举；例如应将 PENDING_PURCHASE 表述为待采购、APPROVED 表述为已通过。"
             ),
-            {"question": question, "visible_evidence": evidence},
+            {
+                "question": question,
+                "visible_evidence": evidence,
+                "allowed_citation_ids": sorted(allowed_citation_ids),
+            },
         )
         referenced = {item.citation_id for item in output.citations}
         invalid = referenced - allowed_citation_ids
@@ -95,6 +167,58 @@ class StructuredModelRoles:
                 f"模型引用了不可用证据：{', '.join(sorted(invalid))}",
                 attempts=attempts,
                 retryable=False,
+                primary_model=response.primary_model,
+                actual_model=response.actual_model,
+                fallback_used=response.fallback_used,
+                fallback_reason=response.fallback_reason,
+            )
+        return output
+
+    async def compose_stream(
+        self,
+        question: str,
+        evidence: list[dict[str, Any]],
+        *,
+        allowed_citation_ids: set[str],
+        answer_delta_handler: Callable[[str], Awaitable[None]],
+    ) -> ComposeOutput:
+        extractor = JsonStringFieldDeltaExtractor("answer")
+
+        async def handle_raw_delta(value: str) -> None:
+            answer_delta = extractor.feed(value)
+            if answer_delta:
+                await answer_delta_handler(answer_delta)
+
+        output, response, attempts = await self._run(
+            ModelPurpose.COMPOSE,
+            ComposeOutput,
+            (
+                "你是采购协同 Compose。只能依据给出的可见证据回答；不得把建议写成事实，不得生成"
+                "未提供的引用。citations 只能使用 allowed_citation_ids 中的知识库引用；如果该列表"
+                "为空，citations 必须为空。Tool 实时事实直接陈述来源，不得伪造 K 编号。正式业务"
+                "动作只能说明需要人工确认。answer 字段必须是完整、面向业务用户的中文回答。"
+                "不得向用户展示 snake_case 字段名、数据库主键或英文状态枚举；例如应将 "
+                "PENDING_PURCHASE 表述为待采购、APPROVED 表述为已通过。"
+            ),
+            {
+                "question": question,
+                "visible_evidence": evidence,
+                "allowed_citation_ids": sorted(allowed_citation_ids),
+            },
+            delta_handler=handle_raw_delta,
+        )
+        referenced = {item.citation_id for item in output.citations}
+        invalid = referenced - allowed_citation_ids
+        if invalid:
+            raise StructuredModelRunError(
+                "MODEL_CITATION_REFERENCE_INVALID",
+                f"模型引用了不可用证据：{', '.join(sorted(invalid))}",
+                attempts=attempts,
+                retryable=False,
+                primary_model=response.primary_model,
+                actual_model=response.actual_model,
+                fallback_used=response.fallback_used,
+                fallback_reason=response.fallback_reason,
             )
         return output
 
@@ -126,10 +250,11 @@ class StructuredModelRoles:
         output_type: type[OutputT],
         system_instruction: str,
         payload: dict[str, Any],
+        delta_handler: Callable[[str], Awaitable[None]] | None = None,
     ) -> tuple[OutputT, StructuredModelResponse, int]:
         request = StructuredModelRequest(
             purpose=purpose,
-            trace_id=self.trace_id,
+            trace_id=self._trace_id_context.get(),
             messages=[
                 ModelMessage(role="system", content=system_instruction),
                 ModelMessage(
@@ -138,13 +263,52 @@ class StructuredModelRoles:
                 ),
             ],
             response_schema=output_type.model_json_schema(mode="serialization"),
+            max_output_tokens=(
+                _ROLE_MAX_OUTPUT_TOKENS[purpose]
+                if self.performance_optimizations_enabled
+                else 2000
+            ),
+            enable_thinking=(
+                _ROLE_THINKING[purpose]
+                if self.performance_optimizations_enabled
+                else None
+            ),
         )
-        return await self.runner.run(request, output_type)
+        output, response, attempts = await self.runner.run(
+            request, output_type, delta_handler=delta_handler
+        )
+        values = dict(self._call_metadata.get() or {})
+        values[purpose] = {
+            "provider": response.provider,
+            "primary_model": response.primary_model or response.model,
+            "actual_model": response.actual_model or response.model,
+            "fallback_used": response.fallback_used,
+            "fallback_reason": response.fallback_reason,
+            "attempts": attempts,
+            "latency_ms": response.latency_ms,
+            "response_headers_ms": response.response_headers_ms,
+            "first_token_ms": response.first_token_ms,
+            "transport_read_ms": response.transport_read_ms,
+            "response_parse_ms": response.response_parse_ms,
+            "schema_validation_ms": response.schema_validation_ms,
+            "runner_latency_ms": response.runner_latency_ms,
+            "retry_overhead_ms": response.retry_overhead_ms,
+            "retry_count": max(0, attempts - 1),
+            "max_output_tokens": request.max_output_tokens,
+            "thinking_enabled": request.enable_thinking,
+            "request_id": response.request_id,
+        }
+        self._call_metadata.set(values)
+        return output, response, attempts
 
 
 class ModelQueryRewriteProvider:
     def __init__(self, roles: StructuredModelRoles) -> None:
         self.roles = roles
+
+    @property
+    def cache_identity(self) -> str:
+        return f"{self.roles.cache_identity}|query-rewrite-v2"
 
     async def rewrite(self, query: str) -> str:
         return (await self.roles.rewrite_query(query)).rewritten_query

@@ -118,3 +118,29 @@ class EmployeeRole(Base):
     )
     status: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class AdminOperationLog(Base):
+    __tablename__ = "admin_operation_log"
+    __table_args__ = (
+        UniqueConstraint("action_token", name="uq_admin_operation_log_action_token"),
+        Index("ix_admin_operation_log_admin_employee_id", "admin_employee_id"),
+        Index("ix_admin_operation_log_target_employee_id", "target_employee_id"),
+    )
+
+    operation_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    admin_employee_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("employee.employee_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    target_employee_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("employee.employee_id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    action_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    action_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )

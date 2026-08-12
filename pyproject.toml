@@ -40,6 +40,10 @@ include = ["app*", "agent_app*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+  "provider_integration: provider adapter integration tests without requiring live credentials",
+  "live_llm: live model tests explicitly enabled with credentials",
+]
 
 [tool.ruff]
 target-version = "py312"

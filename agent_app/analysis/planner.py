@@ -86,6 +86,16 @@ class DeterministicAnalysisPlanner:
                     independent=True,
                 )
             )
+        if requirement_id and "推荐供应商" in message:
+            special_steps.append(
+                AnalysisPlanStep(
+                    step_id="supplier_recommendations",
+                    objective="查询适合当前采购申请且不在有效黑名单中的供应商",
+                    tool=AnalysisToolName.RECOMMEND_SUPPLIERS,
+                    arguments={"requirement_id": requirement_id, "limit": 10},
+                    independent=True,
+                )
+            )
         if special_steps:
             return self._plan(message, special_steps)
 

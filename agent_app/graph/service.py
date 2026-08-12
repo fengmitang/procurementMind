@@ -1,6 +1,8 @@
+import json
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
+from contextvars import ContextVar
 from typing import Any, Protocol, cast
 
 from langgraph.graph import END, START, StateGraph
@@ -27,6 +29,7 @@ from agent_app.investigation.schemas import EvidenceStatus, RiskInvestigationOut
 from agent_app.investigation.service import RiskInvestigationService
 from agent_app.mcp.client import MCPClientError, ProcurementMCPClient
 from agent_app.mcp.schemas import MCPToolResponse
+from agent_app.models.protocols import ModelPurpose
 from agent_app.models.role_schemas import (
     ComposeCitation,
     ComposeOutput,
@@ -66,6 +69,7 @@ MCPClientFactory = Callable[
     [AgentSettings, BackendIdentity, str],
     AbstractAsyncContextManager[MCPToolClient],
 ]
+GraphStreamHandler = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 
 def default_mcp_client_factory(
@@ -102,6 +106,9 @@ class ProcurementGraphService:
         )
         self.knowledge_retriever = knowledge_retriever
         self.model_roles = model_roles
+        self._stream_handler: ContextVar[GraphStreamHandler | None] = ContextVar(
+            f"graph_stream_handler_{id(self)}", default=None
+        )
         self.mcp_circuit_breaker = AsyncCircuitBreaker(
             failure_threshold=settings.mcp_circuit_failure_threshold,
             recovery_timeout_seconds=settings.mcp_circuit_recovery_timeout_seconds,
@@ -114,7 +121,12 @@ class ProcurementGraphService:
     def set_model_roles(self, model_roles: StructuredModelRoles) -> None:
         self.model_roles = model_roles
 
-    async def run(self, request: GraphRunRequest) -> GraphRunResult:
+    async def run(
+        self,
+        request: GraphRunRequest,
+        *,
+        stream_handler: GraphStreamHandler | None = None,
+    ) -> GraphRunResult:
         started = time.perf_counter()
         restored_analysis_query = GraphMemoryMapper.analysis_query(request)
         restored_pending_action = GraphMemoryMapper.pending_action(request)
@@ -125,7 +137,14 @@ class ProcurementGraphService:
             "identity": request.identity.model_dump(mode="json"),
             "current_user": request.current_user.model_dump(mode="json"),
             "message": request.message,
-            "purchase_request_id": GraphMemoryMapper.purchase_request_id(request),
+            "ui_context": (
+                request.ui_context.model_dump(mode="json") if request.ui_context else None
+            ),
+            "purchase_request_id": (
+                request.ui_context.requirement_id
+                if request.ui_context
+                else GraphMemoryMapper.purchase_request_id(request)
+            ),
             "restored_from_snapshot": bool(
                 request.restored_state and request.restored_state.restored_from_snapshot
             ),
@@ -149,13 +168,19 @@ class ProcurementGraphService:
             ),
             "compose_output": None,
         }
-        final = await self.graph.ainvoke(
-            initial,
-            config={
-                "recursion_limit": max(15, self.settings.max_execution_steps + 8),
-                "configurable": {"thread_id": str(request.conversation_id)},
-            },
-        )
+        invoke_config = {
+            "recursion_limit": max(15, self.settings.max_execution_steps + 8),
+            "configurable": {"thread_id": str(request.conversation_id)},
+        }
+        stream_token = self._stream_handler.set(stream_handler)
+        try:
+            if self.model_roles is None:
+                final = await self.graph.ainvoke(initial, config=invoke_config)
+            else:
+                with self.model_roles.bind_trace_id(request.trace_id):
+                    final = await self.graph.ainvoke(initial, config=invoke_config)
+        finally:
+            self._stream_handler.reset(stream_token)
         return GraphRunResult(
             task_id=request.task_id,
             trace_id=request.trace_id,
@@ -244,15 +269,23 @@ class ProcurementGraphService:
             result={
                 "conversation_id": state["conversation_id"],
                 "restored_from_snapshot": state["restored_from_snapshot"],
+                "ui_context_used": state.get("ui_context") is not None,
+                "context_requirement_id": state.get("purchase_request_id"),
+                "context_is_authoritative": False,
             },
         )
         return {"trace_events": [*state["trace_events"], trace.model_dump(mode="json")]}
 
     async def _route_node(self, state: GraphState) -> dict[str, Any]:
+        await self._emit_stream("thinking", {"message": "正在理解你的问题"})
         started = time.perf_counter()
         model_error: StructuredModelRunError | None = None
-        if self.model_roles is not None:
+        model_router_used = self.model_roles is not None and self.router.should_use_model(
+            state["message"]
+        )
+        if model_router_used:
             try:
+                assert self.model_roles is not None
                 model_route = await self.model_roles.route(state["message"])
                 route = RouteType(model_route.route.value)
             except StructuredModelRunError as exc:
@@ -267,13 +300,24 @@ class ProcurementGraphService:
             RouteType.RISK_INVESTIGATION,
         }:
             requirement_id = self.router.extract_requirement_id(state["message"])
+        model_metadata = (
+            self.model_roles.trace_metadata(ModelPurpose.ROUTER)
+            if model_router_used and self.model_roles is not None and model_error is None
+            else self._model_error_metadata(model_error)
+        )
         trace = TraceEvent(
             event_type=TraceEventType.ROUTE,
-            name="model_router" if self.model_roles is not None else "first_version_router",
+            name="model_router" if model_router_used else "first_version_router",
             status="FALLBACK" if model_error else "SUCCESS",
             duration_ms=self._elapsed_ms(started),
             arguments={"message_length": len(state["message"])},
-            result={"route": route.value, "requirement_id": requirement_id},
+            result={
+                "route": route.value,
+                "requirement_id": requirement_id,
+                "model_used": model_router_used and model_error is None,
+                "planner_required": route is RouteType.COMPLEX_QUERY,
+                **model_metadata,
+            },
             error_code=model_error.code if model_error else None,
         )
         updates: dict[str, Any] = {
@@ -308,6 +352,7 @@ class ProcurementGraphService:
         return "realtime_query" if state["route"] == RouteType.HYBRID.value else "sufficiency_check"
 
     async def _knowledge_node(self, state: GraphState) -> dict[str, Any]:
+        await self._emit_stream("retrieving_knowledge", {"message": "正在检索采购制度与业务规则"})
         if state["step_count"] >= self.settings.max_execution_steps:
             return self._boundary_failure(state, "GRAPH_STEP_LIMIT", "已达到最大执行步骤")
         started = time.perf_counter()
@@ -332,11 +377,20 @@ class ProcurementGraphService:
                 started,
             )
         try:
-            result = await self.knowledge_retriever.retrieve(
-                state["message"],
-                filters=RetrievalFilters(allowed_roles=roles),
-                trace_id=state["trace_id"],
-            )
+            retrieval_filters = RetrievalFilters(allowed_roles=roles)
+            if getattr(self.knowledge_retriever, "supports_rewrite_context", False):
+                result = await self.knowledge_retriever.retrieve(
+                    state["message"],
+                    filters=retrieval_filters,
+                    trace_id=state["trace_id"],
+                    rewrite_context=self._rewrite_context(state),  # type: ignore[call-arg]
+                )
+            else:
+                result = await self.knowledge_retriever.retrieve(
+                    state["message"],
+                    filters=retrieval_filters,
+                    trace_id=state["trace_id"],
+                )
         except Exception:
             return self._knowledge_failure(
                 state,
@@ -367,6 +421,11 @@ class ProcurementGraphService:
                 "answerable": result.answerable,
                 "evidence_count": len(result.evidences),
                 "rewrite_applied": result.rewrite_applied,
+                "rewrite_skipped": result.trace.rewrite_skipped,
+                "rewrite_cache_hit": result.trace.rewrite_cache_hit,
+                "embedding_cache_hit": result.trace.embedding_cache_hit,
+                "retrieval_cache_hit": result.trace.retrieval_cache_hit,
+                "rag_timings": result.trace.timings.model_dump(mode="json"),
                 "retrieval_trace_id": result.trace.trace_id,
             },
         )
@@ -387,6 +446,16 @@ class ProcurementGraphService:
             )
             updates["errors"] = [*state["errors"], error.model_dump(mode="json")]
         return updates
+
+    @staticmethod
+    def _rewrite_context(state: GraphState) -> str:
+        value = {
+            "purchase_request_id": state.get("purchase_request_id"),
+            "analysis_query_context": state.get("analysis_query_context"),
+            "restored_from_snapshot": state.get("restored_from_snapshot", False),
+        }
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+
 
     async def _form_prefill_node(self, state: GraphState) -> dict[str, Any]:
         if state["step_count"] >= self.settings.max_execution_steps:
@@ -444,6 +513,8 @@ class ProcurementGraphService:
         }
 
     async def _review_node(self, state: GraphState) -> dict[str, Any]:
+        await self._emit_stream("analyzing", {"message": "正在核对回答依据与业务边界"})
+        started = time.perf_counter()
         issues: list[ReviewIssue] = []
         if not state.get("evidence_sufficient", False):
             issues.append(
@@ -468,8 +539,19 @@ class ProcurementGraphService:
         )
         review = deterministic_review
         model_error: StructuredModelRunError | None = None
-        if self.model_roles is not None and state.get("compose_output"):
+        route = RouteType(state["route"])
+        review_needs_model = route in {
+            RouteType.HYBRID,
+            RouteType.RISK_INVESTIGATION,
+        } or (route is RouteType.COMPLEX_QUERY and self._should_use_model_planner(state["message"]))
+        model_review_used = (
+            self.model_roles is not None
+            and state.get("compose_output") is not None
+            and review_needs_model
+        )
+        if model_review_used:
             try:
+                assert self.model_roles is not None
                 review = await self.model_roles.review(
                     state["message"],
                     ComposeOutput.model_validate(state["compose_output"]),
@@ -491,14 +573,21 @@ class ProcurementGraphService:
                     "requires_human_confirmation": True,
                 }
             )
+        model_metadata = (
+            self.model_roles.trace_metadata(ModelPurpose.REVIEW)
+            if model_review_used and self.model_roles is not None and model_error is None
+            else self._model_error_metadata(model_error)
+        )
         trace = TraceEvent(
             event_type=TraceEventType.GRAPH,
             name="review",
             status="FALLBACK" if model_error else "SUCCESS" if review.passed else "BLOCKED",
+            duration_ms=self._elapsed_ms(started),
             result={
                 "passed": review.passed,
                 "issue_codes": [item.code.value for item in review.issues],
-                "model_used": self.model_roles is not None and model_error is None,
+                "model_used": model_review_used and model_error is None,
+                **model_metadata,
             },
             error_code=model_error.code if model_error else None,
         )
@@ -510,6 +599,20 @@ class ProcurementGraphService:
             "review": review.model_dump(mode="json"),
             "trace_events": [*state["trace_events"], trace.model_dump(mode="json")],
         }
+        non_confirmation_blockers = [
+            item
+            for item in review.issues
+            if item.severity is ReviewSeverity.BLOCKING
+            and item.code is not ReviewIssueCode.HUMAN_CONFIRMATION_REQUIRED
+        ]
+        if non_confirmation_blockers and model_review_used and model_error is None:
+            updates["reply"] = review.revised_answer or (
+                "当前结论未通过证据与权限审查，暂不向你提供可能误导的分析结果。"
+                "请补充问题范围或稍后重试。"
+            )
+            trace.result["review_output_enforced"] = True
+            trace.result["revised_answer_used"] = review.revised_answer is not None
+            updates["trace_events"][-1] = trace.model_dump(mode="json")
         if model_error:
             error = GraphError(
                 code=model_error.code,
@@ -542,6 +645,7 @@ class ProcurementGraphService:
         return {"trace_events": [*state["trace_events"], trace.model_dump(mode="json")]}
 
     async def _risk_investigation_node(self, state: GraphState) -> dict[str, Any]:
+        await self._emit_stream("querying_business_data", {"message": "正在核查采购风险"})
         if state["step_count"] >= self.settings.max_execution_steps:
             return self._boundary_failure(state, "GRAPH_STEP_LIMIT", "已达到最大执行步骤")
         requirement_id = state.get("purchase_request_id")
@@ -640,6 +744,7 @@ class ProcurementGraphService:
         }
 
     async def _analysis_node(self, state: GraphState) -> dict[str, Any]:
+        await self._emit_stream("analyzing", {"message": "正在分析采购数据"})
         if state["step_count"] >= self.settings.max_execution_steps:
             return self._boundary_failure(state, "GRAPH_STEP_LIMIT", "已达到最大执行步骤")
         if state["tool_call_count"] >= self.settings.max_tool_calls:
@@ -650,7 +755,48 @@ class ProcurementGraphService:
             )
         started = time.perf_counter()
         identity = BackendIdentity.model_validate(state["identity"])
+        analysis_message = state["message"]
+        if state.get("ui_context") and state.get("purchase_request_id"):
+            analysis_message = (
+                f"{analysis_message}\n当前页面采购申请 {state['purchase_request_id']}。"
+                "该编号仅用于定位，所有业务事实必须通过工具重新查询。"
+            )
         previous_query = state.get("analysis_query_context")
+        prepared_plan = None
+        planner_trace: TraceEvent | None = None
+        planner_error: StructuredModelRunError | None = None
+        model_planner_requested = self.model_roles is not None and self._should_use_model_planner(
+            analysis_message
+        )
+        if model_planner_requested:
+            planner_started = time.perf_counter()
+            try:
+                prepared_plan = await self.model_roles.plan(
+                    analysis_message,
+                    previous_query if isinstance(previous_query, dict) else None,
+                )
+            except StructuredModelRunError as exc:
+                planner_error = exc
+            planner_metadata = (
+                self.model_roles.trace_metadata(ModelPurpose.ANALYSIS_PLAN)
+                if planner_error is None
+                else self._model_error_metadata(planner_error)
+            )
+            planner_trace = TraceEvent(
+                event_type=TraceEventType.GRAPH,
+                name="model_planner",
+                status="FALLBACK" if planner_error else "SUCCESS",
+                duration_ms=self._elapsed_ms(planner_started),
+                result={
+                    "planner_called": True,
+                    "plan": (
+                        prepared_plan.model_dump(mode="json") if prepared_plan is not None else None
+                    ),
+                    "model_used": planner_error is None,
+                    **planner_metadata,
+                },
+                error_code=planner_error.code if planner_error else None,
+            )
         try:
             async with self.mcp_client_factory(
                 self.settings,
@@ -662,13 +808,14 @@ class ProcurementGraphService:
                     self.mcp_circuit_breaker,
                 )
                 output = await self.analysis_agent.run(
-                    state["message"],
+                    analysis_message,
                     protected_client,
                     previous_query=(
                         AnalyticsQueryInput.model_validate(previous_query)
                         if previous_query
                         else None
                     ),
+                    prepared_plan=prepared_plan,
                 )
         except MCPClientError as exc:
             return self._analysis_failure(state, exc.code, exc.message, started)
@@ -726,8 +873,25 @@ class ProcurementGraphService:
             result={
                 "successful_steps": sum(item.success for item in output.step_results),
                 "failed_steps": sum(not item.success for item in output.step_results),
+                "planner_called": model_planner_requested,
+                "planner_model_used": prepared_plan is not None,
+                "planner_mode": "model" if model_planner_requested else "deterministic",
+                "plan": output.plan.model_dump(mode="json"),
             },
         )
+        trace_events = [*state["trace_events"]]
+        if planner_trace is not None:
+            trace_events.append(planner_trace.model_dump(mode="json"))
+        trace_events.append(trace.model_dump(mode="json"))
+        graph_errors = [*state["errors"]]
+        if planner_error is not None:
+            graph_errors.append(
+                GraphError(
+                    code=planner_error.code,
+                    message=(f"模型 Planner 失败，已使用确定性 Planner：{planner_error.message}"),
+                    source="model_planner",
+                ).model_dump(mode="json")
+            )
         return {
             "step_count": state["step_count"] + 1,
             "tool_call_count": state["tool_call_count"] + len(output.step_results),
@@ -740,10 +904,10 @@ class ProcurementGraphService:
                 *(item.model_dump(mode="json") for item in evidence),
             ],
             "errors": [
-                *state["errors"],
+                *graph_errors,
                 *(item.model_dump(mode="json") for item in errors),
             ],
-            "trace_events": [*state["trace_events"], trace.model_dump(mode="json")],
+            "trace_events": trace_events,
             "analysis": output.model_dump(mode="json"),
             "analysis_query_context": (
                 output.effective_query.model_dump(mode="json")
@@ -752,7 +916,26 @@ class ProcurementGraphService:
             ),
         }
 
+    @staticmethod
+    def _should_use_model_planner(message: str) -> bool:
+        """Use the model only when a request needs genuine multi-step planning.
+
+        Context shortcuts that map to one controlled read-only tool keep the
+        deterministic planner. This avoids spending a full model round trip
+        before users see the first business result while preserving the model
+        planner for aggregations, comparisons, and open-ended analysis.
+        """
+        normalized = "".join(message.lower().split())
+        single_tool_intents = (
+            "推荐供应商",
+            "相似案例",
+            "供应商风险",
+            "历史采购情况",
+        )
+        return not any(intent in normalized for intent in single_tool_intents)
+
     async def _realtime_query_node(self, state: GraphState) -> dict[str, Any]:
+        await self._emit_stream("querying_business_data", {"message": "正在查询采购业务记录"})
         source = "mcp://get_purchase_request"
         if state["step_count"] >= self.settings.max_execution_steps:
             return self._boundary_failure(state, "GRAPH_STEP_LIMIT", "已达到最大执行步骤")
@@ -849,8 +1032,10 @@ class ProcurementGraphService:
         return updates
 
     async def _answer_node(self, state: GraphState) -> dict[str, Any]:
+        await self._emit_stream("analyzing", {"message": "正在整理查询结果"})
         started = time.perf_counter()
-        reply = self._compose_answer(state)
+        deterministic_reply = self._compose_answer(state)
+        reply = deterministic_reply
         citations: list[ComposeCitation] = []
         if state.get("knowledge"):
             knowledge = RetrievalResult.model_validate(state["knowledge"])
@@ -866,17 +1051,35 @@ class ProcurementGraphService:
             citations=citations,
             requires_human_confirmation=state.get("pending_action") is not None,
         )
+        deterministic_completion_applied = False
         model_error: StructuredModelRunError | None = None
         if self.model_roles is not None and state["evidence"]:
             try:
-                compose_output = await self.model_roles.compose(
-                    state["message"],
-                    state["evidence"],
-                    allowed_citation_ids={item.citation_id for item in citations},
-                )
+                if self._stream_handler.get() is None:
+                    compose_output = await self.model_roles.compose(
+                        state["message"],
+                        state["evidence"],
+                        allowed_citation_ids={item.citation_id for item in citations},
+                    )
+                else:
+                    compose_output = await self.model_roles.compose_stream(
+                        state["message"],
+                        state["evidence"],
+                        allowed_citation_ids={item.citation_id for item in citations},
+                        answer_delta_handler=self._emit_answer_delta,
+                    )
                 reply = compose_output.answer
+                if self._answer_looks_incomplete(reply):
+                    reply = f"{reply}\n\n{deterministic_reply}"
+                    compose_output = compose_output.model_copy(update={"answer": reply})
+                    deterministic_completion_applied = True
             except StructuredModelRunError as exc:
                 model_error = exc
+        model_metadata = (
+            self.model_roles.trace_metadata(ModelPurpose.COMPOSE)
+            if self.model_roles is not None and model_error is None and state["evidence"]
+            else self._model_error_metadata(model_error)
+        )
         trace = TraceEvent(
             event_type=TraceEventType.GRAPH,
             name="compose_answer",
@@ -884,8 +1087,12 @@ class ProcurementGraphService:
             duration_ms=self._elapsed_ms(started),
             result={
                 "reply_length": len(reply),
-                "model_used": self.model_roles is not None and model_error is None,
+                "model_used": (
+                    self.model_roles is not None and bool(state["evidence"]) and model_error is None
+                ),
                 "citation_ids": [item.citation_id for item in compose_output.citations],
+                "deterministic_completion_applied": deterministic_completion_applied,
+                **model_metadata,
             },
             error_code=model_error.code if model_error else None,
         )
@@ -905,7 +1112,33 @@ class ProcurementGraphService:
                 source="model_compose",
             )
             updates["errors"] = [*state["errors"], error.model_dump(mode="json")]
+        if self.model_roles is None or not state["evidence"] or model_error is not None:
+            await self._emit_answer_delta(reply)
         return updates
+
+    async def _emit_answer_delta(self, value: str) -> None:
+        await self._emit_stream("answer_delta", {"delta": value})
+
+    @staticmethod
+    def _answer_looks_incomplete(value: str) -> bool:
+        normalized = value.rstrip()
+        return not normalized or normalized.endswith(("：", ":"))
+
+    async def _emit_stream(self, event: str, data: dict[str, Any]) -> None:
+        handler = self._stream_handler.get()
+        if handler is not None:
+            await handler(event, data)
+
+    @staticmethod
+    def _model_error_metadata(error: StructuredModelRunError | None) -> dict[str, Any]:
+        if error is None:
+            return {}
+        return {
+            "primary_model": error.primary_model,
+            "actual_model": error.actual_model,
+            "fallback_used": error.fallback_used,
+            "fallback_reason": error.fallback_reason,
+        }
 
     def _compose_answer(self, state: GraphState) -> str:
         route = RouteType(state["route"])

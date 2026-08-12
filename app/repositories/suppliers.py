@@ -27,14 +27,23 @@ class SupplierRepository:
     async def search(
         self,
         session: AsyncSession,
-        keyword: str,
+        keyword: str | None,
+        status: bool | None,
         page: int,
         page_size: int,
     ) -> tuple[list[Supplier], int]:
-        pattern = f"%{keyword}%"
-        condition = Supplier.status.is_(True) & (
-            Supplier.supplier_name.like(pattern) | Supplier.unified_social_credit_code.like(pattern)
-        )
+        conditions = []
+        if status is not None:
+            conditions.append(Supplier.status.is_(status))
+        if keyword:
+            pattern = f"%{keyword}%"
+            conditions.append(
+                Supplier.supplier_name.like(pattern)
+                | Supplier.unified_social_credit_code.like(pattern)
+            )
+        condition = True if not conditions else conditions[0]
+        for item in conditions[1:]:
+            condition = condition & item
         total = int(
             await session.scalar(select(func.count()).select_from(Supplier).where(condition)) or 0
         )
@@ -50,6 +59,37 @@ class SupplierRepository:
             ).all()
         )
         return suppliers, total
+
+    async def list_building_risks(
+        self,
+        session: AsyncSession,
+        *,
+        building_ids: frozenset[int] | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[tuple[SupplierBlacklist, PurchaseRequest]], int]:
+        statement = select(SupplierBlacklist, PurchaseRequest).join(
+            PurchaseRequest,
+            PurchaseRequest.request_id == SupplierBlacklist.source_request_id,
+        )
+        if building_ids is not None:
+            statement = statement.where(PurchaseRequest.building_id.in_(building_ids))
+        total = int(
+            await session.scalar(select(func.count()).select_from(statement.subquery())) or 0
+        )
+        rows = list(
+            (
+                await session.execute(
+                    statement.order_by(
+                        SupplierBlacklist.start_at.desc(),
+                        SupplierBlacklist.blacklist_id.desc(),
+                    )
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                )
+            ).tuples()
+        )
+        return rows, total
 
     async def get(self, session: AsyncSession, supplier_id: int) -> Supplier | None:
         return await session.get(Supplier, supplier_id)

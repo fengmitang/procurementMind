@@ -260,8 +260,9 @@ class ProcurementService:
         if missing:
             raise AppError(
                 "MISSING_REQUIRED_FIELDS",
-                f"楼长字段未完成：{', '.join(missing)}",
+                "审批方案尚未填写完整，请补充必填信息后再提交",
                 400,
+                details={"fields": missing, "stage": "REVIEW"},
             )
         review.review_status = ReviewStatus.COMPLETED.value
         review.review_result = "APPROVED"
@@ -388,6 +389,7 @@ class ProcurementService:
                 "VALIDATION_ERROR",
                 "入库数量少于申请数量时必须填写入库备注",
                 422,
+                details={"fields": ["receipt_remark"], "reason": "PARTIAL_RECEIPT"},
             )
 
         receipt = await self.repository.get_receipt(session, request_id)
@@ -525,6 +527,7 @@ class ProcurementService:
         *,
         view: str,
         status: str | None,
+        keyword: str | None,
         page: int,
         page_size: int,
     ) -> RequirementListData:
@@ -534,11 +537,14 @@ class ProcurementService:
                 RoleCode.BUILDING_MANAGER.value,
                 RoleCode.ADMIN.value,
             )
+        if view == "ADMIN_SCOPE":
+            require_any_role(current_user, RoleCode.ADMIN.value)
         items, total = await self.repository.list_requests(
             session,
             employee_id=current_user.employee_id,
             view=view,
             status=status,
+            keyword=keyword,
             building_ids=current_user.building_ids,
             page=page,
             page_size=page_size,

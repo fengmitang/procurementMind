@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -24,6 +25,12 @@ class BGEEmbeddingModel:
     @property
     def initialized(self) -> bool:
         return self._model is not None
+
+    @property
+    def embedding_cache_identity(self) -> str:
+        config = self.model_path / "config.json"
+        digest = hashlib.sha256(config.read_bytes()).hexdigest()[:16]
+        return f"{self.model_path}|{digest}|bge-m3-dense-v1"
 
     def initialize(self) -> BGEEmbeddingModel:
         if self.initialized:
@@ -66,3 +73,16 @@ class BGEEmbeddingModel:
             return_colbert_vecs=False,
         )
         return [[float(value) for value in vector] for vector in output["dense_vecs"]]
+
+    def encode_dense(
+        self,
+        texts: list[str],
+        *,
+        batch_size: int = 4,
+        max_length: int = 512,
+    ) -> list[list[float]]:
+        return self.encode(
+            texts,
+            batch_size=batch_size,
+            max_length=max_length,
+        )

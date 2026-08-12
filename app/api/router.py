@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.routes.admin import router as admin_router
 from app.api.routes.agent_sessions import router as agent_sessions_router
 from app.api.routes.analytics import router as analytics_router
 from app.api.routes.demo import router as demo_router
@@ -19,6 +20,7 @@ api_router.include_router(agent_sessions_router)
 api_router.include_router(analytics_router)
 api_router.include_router(notifications_router)
 api_router.include_router(users_router)
+api_router.include_router(admin_router)
 api_router.include_router(handlers_router)
 api_router.include_router(procurement_router)
 api_router.include_router(records_router)

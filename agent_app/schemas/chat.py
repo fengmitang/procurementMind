@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agent_app.analysis.schemas import AnalysisOutput
-from agent_app.graph.schemas import PendingAction
+from agent_app.graph.schemas import PendingAction, UIContext
 from agent_app.investigation.schemas import RiskInvestigationOutput
 from agent_app.models.role_schemas import ReviewOutput
 from agent_app.observability.schemas import ExecutionDetails
@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
     external_conversation_id: str | None = Field(default=None, max_length=150)
     external_message_id: str | None = Field(default=None, max_length=150)
+    ui_context: UIContext | None = None
 
     @field_validator("platform_type")
     @classmethod
@@ -42,3 +43,4 @@ class ChatData(BaseModel):
     review: ReviewOutput | None = None
     evidence_sufficient: bool = False
     pending_action: PendingAction | None = None
+    performance: dict[str, int] = Field(default_factory=dict)

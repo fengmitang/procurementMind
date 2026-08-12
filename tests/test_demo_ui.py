@@ -31,6 +31,15 @@ async def demo_request(payload: dict[str, object]):
         return await client.post("/demo-api/proxy", json=payload)
 
 
+def read_frontend_source() -> str:
+    frontend = Path(__file__).resolve().parents[1] / "frontend"
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (frontend / "src").rglob("*")
+        if path.suffix in {".ts", ".tsx", ".css"}
+    )
+
+
 @pytest.mark.asyncio
 async def test_demo_page_and_assets_are_available() -> None:
     async with AsyncClient(
@@ -38,26 +47,17 @@ async def test_demo_page_and_assets_are_available() -> None:
         base_url="http://test",
     ) as client:
         page = await client.get("/demo/")
-        script = await client.get("/demo/app.js")
-        stylesheet = await client.get("/demo/styles.css")
 
     assert page.status_code == 200
-    assert "采购流程体验台" in page.text
-    assert "新建采购申请" in page.text
-    assert "管辖楼宇全部申请" in page.text
-    assert script.status_code == 200
-    assert "保存草稿" in script.text
-    assert "保存审核资料" in script.text
-    assert "保存采购信息" in script.text
-    assert "保存入库信息" in script.text
-    assert 'data-tab="assistant"' in page.text
-    assert 'id="assistant-form"' in page.text
-    assert 'id="assistant-result"' in page.text
-    assert '"/demo-api/agent-chat"' in script.text
-    assert "执行详情" in script.text
-    assert "Trace 时间线" in script.text
-    assert "本次未调用模型" in script.text
-    assert 'state.role.kind !== "applicant"' in script.text
+    assert "采购智能协同平台" in page.text
+    app_source = read_frontend_source()
+    assert "新建采购申请" in app_source
+    assert "楼宇采购记录" in app_source
+    assert "保存草稿" in app_source
+    assert "填写审批方案" in app_source
+    assert "登记采购结果" in app_source
+    assert "登记入库" in app_source
+    assert "'/demo-api/agent-chat'" in app_source
     for device_type in (
         "电气",
         "暖通",
@@ -68,8 +68,7 @@ async def test_demo_page_and_assets_are_available() -> None:
         "IDC网络",
         "其他",
     ):
-        assert device_type in script.text
-    assert stylesheet.status_code == 200
+        assert device_type in app_source
 
 
 @pytest.mark.asyncio
@@ -233,7 +232,12 @@ async def test_demo_agent_action_forwards_only_confirm_or_cancel(
 def test_frontend_does_not_contain_gateway_credentials() -> None:
     frontend = Path(__file__).resolve().parents[1] / "frontend"
     combined_source = "\n".join(
-        path.read_text(encoding="utf-8") for path in frontend.iterdir() if path.is_file()
+        path.read_text(encoding="utf-8")
+        for path in frontend.rglob("*")
+        if path.is_file()
+        and "node_modules" not in path.parts
+        and "dist" not in path.parts
+        and path.suffix in {".ts", ".tsx", ".js", ".json", ".html", ".css"}
     )
 
     assert "IDENTITY_GATEWAY_SECRET" not in combined_source
@@ -241,14 +245,16 @@ def test_frontend_does_not_contain_gateway_credentials() -> None:
     assert "MODEL_API_KEY" not in combined_source
 
 
-def test_frontend_contains_rag_trace_and_hitl_controls() -> None:
+def test_frontend_contains_rag_sources_and_hitl_controls() -> None:
     frontend = Path(__file__).resolve().parents[1] / "frontend"
-    app_source = (frontend / "app.js").read_text(encoding="utf-8")
-    html_source = (frontend / "index.html").read_text(encoding="utf-8")
+    assistant_source = (frontend / "src/pages/assistant/AssistantPage.tsx").read_text(
+        encoding="utf-8"
+    )
+    agent_client_source = (frontend / "src/services/agentClient.ts").read_text(encoding="utf-8")
 
-    assert "renderKnowledgeResult" in app_source
-    assert "检索 Trace" in app_source
-    assert 'data-hitl="confirm"' in app_source
-    assert 'data-hitl="cancel"' in app_source
-    assert "/demo-api/agent-actions/" in app_source
-    assert "正式动作需人工确认" in html_source
+    assert "Sources" in assistant_source
+    assert "knowledge?.citations" in assistant_source
+    assert "确认执行" in assistant_source
+    assert "取消" in assistant_source
+    assert "/demo-api/agent-actions/" in agent_client_source
+    assert "trace_events" not in assistant_source

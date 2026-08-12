@@ -215,6 +215,7 @@ class ProcurementRepository:
         employee_id: int,
         view: str,
         status: str | None,
+        keyword: str | None = None,
         building_ids: frozenset[int] = frozenset(),
     ) -> Select:
         statement = select(PurchaseRequest)
@@ -224,6 +225,8 @@ class ProcurementRepository:
             statement = statement.where(PurchaseRequest.current_handler_employee_id == employee_id)
         elif view == "BUILDING_SCOPE":
             statement = statement.where(PurchaseRequest.building_id.in_(building_ids))
+        elif view == "ADMIN_SCOPE":
+            pass
         else:
             statement = statement.where(
                 or_(
@@ -236,6 +239,11 @@ class ProcurementRepository:
             )
         if status:
             statement = statement.where(PurchaseRequest.status == status)
+        if keyword:
+            pattern = f"%{keyword}%"
+            statement = statement.where(
+                PurchaseRequest.request_no.like(pattern) | PurchaseRequest.device_name.like(pattern)
+            )
         return statement
 
     async def list_requests(
@@ -245,6 +253,7 @@ class ProcurementRepository:
         employee_id: int,
         view: str,
         status: str | None,
+        keyword: str | None = None,
         building_ids: frozenset[int] = frozenset(),
         page: int,
         page_size: int,
@@ -253,6 +262,7 @@ class ProcurementRepository:
             employee_id=employee_id,
             view=view,
             status=status,
+            keyword=keyword,
             building_ids=building_ids,
         )
         total = int(

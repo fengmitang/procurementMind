@@ -1,9 +1,9 @@
 # 数据中心设备采购智能协同 Agent 开发任务清单
 
-> 版本：V1.2
+> 版本：V1.4
 > 建立日期：2026-08-04
-> 最近更新：2026-08-10
-> 当前阶段：阶段 20 Web Agent 交互与 HITL 已完成；等待确认进入阶段 21
+> 最近更新：2026-08-11
+> 当前阶段：阶段 23 Web 前端业务修复与 Agent 上下文协同进行中；阶段 21 交付收尾保留进行中
 > 需求与设计基线：需求分析 V2.1，以及技术方案、功能模块划分、系统分析、开发计划 V1.1
 > 唯一交付仓库：`fengmitang/procurementMind`
 
@@ -495,8 +495,12 @@ Markdown，不合并成长文档；业务实时事实继续只由采购后端 To
   Token 账本仅接受 `PROVIDER_REPORTED` 的完整 input/output/total，缺失时聚合值保持 `null`。
   模型专项 22 项、全仓 213 项测试通过，Ruff check 和 229 个 Python 文件格式检查通过；完整契约见
   `docs/baseline/llm-provider-contract-v0.1.md`。
-- **阻塞验收**：`[!]` 尚未确认真实生成模型供应商、模型、有效 API Key 与额度，因此真实 Provider
-  适配器、线上调用和模型质量验收未执行；未将 Fake 结果冒充真实成功，不阻塞阶段 19 的确定性接入。
+- **真实模型补充验收**：`[x]` 2026-08-10；正式启动已按“配置 → OpenAI-compatible Adapter →
+  Provider 注册 → ModelRuntime → StructuredModelRoles → LangGraph”自动组装，同时保留 Fake/Mock 注入。
+  `qwen3.8-max` 已通过正式 Router、Compose、Review 与 Planner 调用，`glm-5.2` 已在 Primary 无效和
+  Primary 超时场景由 Runtime 统一接管；Trace 记录 `primary_model/actual_model/fallback_used/
+  fallback_reason`。`/ready` 改为反映 Runtime 初始化状态，不再以环境变量存在冒充就绪。正式验证脚本
+  为 `scripts/verify_agent_llm_flow.py`，Provider 单项验证脚本为 `scripts/verify_llm_provider.py`。
 
 ## 阶段 19：LangGraph Agent 编排
 
@@ -516,8 +520,12 @@ Markdown，不合并成长文档；业务实时事实继续只由采购后端 To
   快照。预填只生成草稿，confirmation 明确 `executed=false`。专项 47 项、全仓 218 项测试、Ruff
   check、231 个 Python 文件格式检查及确定性评测 25/25 通过；真实本地 RAG→Graph 得到 5 条引用、
   充分性与 Review 均通过。基线见 `docs/baseline/langgraph-orchestration-v0.1.md`。
-- **阻塞验收**：`[!]` 真实 Provider 未配置，因此模型 Router/Rewrite/Compose/Review 的线上质量、
-  用量和费用仍未验收；Fake 只验证节点契约，不影响确定性/RAG/Tool 编排完成状态。
+- **真实编排补充验收**：`[x]` 2026-08-10；正式 LangGraph 已通过真实模型完成知识问答、Model
+  Router、Tool 后 Compose 和复杂分析。Planner 仅在 `COMPLEX_QUERY` 调用，简单知识问答直接 RAG，
+  简单实时查询直接 Tool；Planner 调用和完整计划进入 Graph Trace。复杂分析 Trace 已确认
+  `model_planner.model_used=true`、`actual_model=qwen3.8-max`，故意配置无效 Primary 时 Router、Compose、
+  Review 均自动使用 `glm-5.2`。单次复杂回归中曾出现 Primary Review 超时且 Fallback 返回空结构化
+  正文，Graph 按安全策略使用确定性 Review 并保留错误，未伪造模型成功。
 
 ## 阶段 20：Web Agent 交互与 HITL
 
@@ -545,7 +553,79 @@ Markdown，不合并成长文档；业务实时事实继续只由采购后端 To
   RAG 与实时事实严格分离；无高风险权限/提示注入/任意 SQL/Secret 泄漏；阻塞的真实模型验收单独列明。
 - **测试方式**：全量 Pytest、`ruff check .`、`ruff format --check .`、Compose config/health、真实 7 文档
   索引与检索、Web 端到端、故障注入和交付脚本。
-- **当前状态**：`[ ]`。
+- **当前状态**：`[-]` 2026-08-10；已完成最小真实 Agent 端到端闭环：通过正式 `/api/v1/chat`
+  使用同一 `conversation_id=93028` 跑通知识问答、实时采购单查询和 RAG + Tool 混合查询。知识场景
+  检索 7 文档 Qdrant 正式索引并返回 5 条 Citation；实时场景通过 MCP `get_purchase_request(91003)`
+  读取 `REJECTED`、当前处理人和“预算说明不足”；混合场景从会话状态恢复 `requirement_id=91003`，
+  同时完成 `knowledge_retrieval` 与 Tool 调用。Router/Compose/Review 已由真实 Provider 执行，Trace
+  保留 route、retrieval、tool、模型和错误信息。CPU RAG + 远程模型的混合链路实测超过 120 秒，当前
+  开发机通过既有 `TASK_TIMEOUT_SECONDS=300` 配置验收。验证脚本为 `scripts/verify_agent_e2e.py`。
+  阶段 21 其余 Compose 全栈交付、安全扫描、备份恢复和最终文档仍待完成。
+
+## 阶段 22：React Web 前端第一版
+
+- **主要工作**：以《数据中心设备采购智能协同 Agent—前端设计文档》V0.1 为基线，将既有原生
+  JavaScript 开发体验台升级为 React + TypeScript + Vite + React Router + Ant Design +
+  Ant Design X 的正式 Web 第一版；实现统一 Layout/Theme、动态角色菜单、工作台、智能助手、
+  我的采购、新建与详情、楼长/采购员/仓管岗位页面和个人信息；统一 Backend/Agent Client、身份状态、
+  Loading/Empty/Error 与开发环境 BFF 安全边界。
+- **依赖**：阶段 19–20 的 LangGraph、Agent API、HITL 与现有 Backend API；开发 BFF
+  `/demo-api/proxy`、`/demo-api/agent-chat`、`/demo-api/agent-actions/*`。
+- **完成标准**：角色菜单与页面完整；Agent 真实对话、RAG 引用、Tool 结果和 HITL 可交互；采购列表、
+  新建/保存/提交、详情、岗位任务和供应商数据按真实权限联调；Mock 集中且显式标记；浏览器不包含
+  API Key 或 Gateway Secret；TypeScript、Lint、Build、基础测试和关键浏览器流程通过。
+- **测试方式**：`npm run typecheck`、`npm run lint`、`npm run test`、`npm run build`；分别切换
+  APPLICANT、BUILDING_MANAGER、PURCHASER、WAREHOUSE_MANAGER 验证菜单与岗位页；在真实 Backend
+  8000 / Agent 8100 上验证 Agent、申请列表、创建/保存/提交、详情和错误状态；检查构建产物 Secret。
+- **当前状态**：`[x]` 2026-08-10；完成 React 正式第一版及蓝白企业 Theme，交付工作台、Ant Design X
+  智能助手、我的采购、新建/编辑/详情、楼长/采购员/仓管岗位页、供应商和个人信息；角色菜单由真实
+  `/api/v1/users/me` 动态生成，所有业务请求经统一 BFF Client，浏览器不持有 Gateway Secret。
+  浏览器实测 APPLICANT、BUILDING_MANAGER、PURCHASER、WAREHOUSE_MANAGER 菜单与真实待办数据；
+  Agent 真实查询 91003 后展示 Tool 结果和业务回答；从 Web 创建并提交测试申请 91041，详情正确显示
+  `PENDING_REVIEW`、当前楼长和操作历史。TypeScript、ESLint、Vitest 1/1、生产 Build、Demo/BFF
+  Pytest 8/8、Ruff 与格式检查均通过；构建产物 Secret 扫描通过，干净浏览器控制台 0 warning/error，
+  1280px 无横向溢出。当前后端仍只有 `APPLICANT` + 楼宇归属可发起申请，供应商风险也缺少楼宇范围
+  列表 API；前端对两处均显式说明且未伪造 Mock。构建仅保留 1.45 MB 单 chunk 优化提示。
+
+## 阶段 23：Web 前端业务修复与 Agent 上下文协同
+
+- **主要工作**：恢复 Agent、楼长审批、采购登记和仓库入库等真实业务闭环；建立 Agent SSE 流式事件、
+  统一业务错误映射、岗位待办 Badge、供应商列表与楼宇风险正式 API、业务字段/枚举中文化、ADMIN 独立
+  信息架构，以及采购详情中的上下文智能辅助 Drawer。所有写操作继续通过 Backend 状态机、权限、
+  `expected_version`、`action_token` 与 HITL 执行，不以 Mock 冒充缺失能力。
+- **依赖**：阶段 22 Web 第一版；阶段 19–20 的 LangGraph、会话、Tool/RAG、HITL；现有采购、身份、
+  供应商、黑名单、楼宇和操作记录模型；真实 MySQL/Redis/Qdrant、Backend 8000、Agent 8100。
+- **完成标准**：14 项问题均有根因、正式实现和回归证据；Agent 四类请求有实时业务化状态且连接正确
+  结束；审批/采购/入库可按真实 Schema 完成；ADMIN 仅拥有管理视角和只读采购/供应商能力；上下文
+  Assistant 只传页面类型与业务 ID，权威事实仍由 Tool 获取；全站无 raw snake_case、英文状态和技术
+  异常直出；无 Secret 泄漏、重复提交或越权。
+- **测试方式**：Backend/Agent Pytest、`ruff check .`、`ruff format --check .`；Frontend TypeScript、
+  ESLint、Vitest、Production Build；真实服务下验证 Agent 知识/实时/Hybrid/复杂/错误/超时/流式，四类
+  岗位流程、供应商和 ADMIN 权限；最终使用真实浏览器检查 Network、SSE 关闭、控制台、表单和全流程。
+- **当前状态**：`[x]` 2026-08-11；阶段 23 已完成并通过全栈回归。初始审计中真实 Web BFF 知识问答耗时
+  97.1 秒后成功，Trace `3c9f9275-e932-4920-8df1-f495bf38716b`：Router 11.1 秒、CPU RAG 42.9 秒、
+  Compose 15.3 秒、Review 26.5 秒；当前为单次 JSON 响应且期间无状态事件。配置同时存在 Agent 总任务
+  300 秒、BFF 130 秒的反向超时风险。该请求被模型误路由为 HYBRID、缺少采购单 ID 后 Tool 跳过，
+  进一步增加了无效链路。尚未将阶段或任一实现任务提前标记完成。
+
+| ID | 可验收任务 | 依赖 | 验收重点 | 状态 |
+|---|---|---|---|---|
+| WEBFIX-001 | Agent 无响应全链路定位、耗时 Trace 与 timeout 层级修复 | 阶段 19–22 | 四类请求均结束；Trace 可定位节点；下游时限不短于 Agent 总时限 | `[x]` 2026-08-11 |
+| WEBFIX-002 | Agent SSE 状态与最终文本流式契约、BFF 转发、前端取消/重试 | WEBFIX-001 | 真实事件、连接关闭、页面卸载取消、error/timeout 测试 | `[x]` 2026-08-11 |
+| WEBFIX-003 | 楼长审批 Schema/条件表单/通过与驳回闭环 | WEBFIX-001 | 所有必填字段对齐；合同条件校验；写入保留版本与幂等 | `[x]` 2026-08-11 |
+| WEBFIX-004 | 仓库入库数量边界与业务提示修复 | WEBFIX-001 | requested-1、requested、requested+1 前后端一致 | `[x]` 2026-08-11 |
+| WEBFIX-005 | 统一 Backend field errors 与前端中文业务错误映射 | WEBFIX-003–004 | 全站技术字段、异常和 HTTP body 不直出 | `[x]` 2026-08-11 |
+| WEBFIX-006 | 供应商默认分页列表与名称远程选择器 | WEBFIX-005 | 无 keyword 可分页；采购登记不要求用户输入 ID | `[x]` 2026-08-11 |
+| WEBFIX-007 | 楼宇范围供应商风险正式只读 API 与页面 | WEBFIX-006 | 楼宇/角色权限、有效状态、原因、时间与来源均来自真实数据 | `[x]` 2026-08-11 |
+| WEBFIX-008 | 楼长/采购员快捷入口与三岗位真实 Badge 集中刷新 | WEBFIX-003–007 | total 驱动、0 隐藏、操作后刷新、无高频重复请求 | `[x]` 2026-08-11 |
+| WEBFIX-009 | 详情、列表、历史、供应商字段和枚举集中中文化 | WEBFIX-005 | 无 raw snake_case、英文业务枚举和数据库 ID 输入 | `[x]` 2026-08-11 |
+| WEBFIX-010 | ADMIN 独立菜单、真实工作台和员工管理正式 API | WEBFIX-006 | Employee CRUD/停用、楼宇/角色、真实统计、权限测试；不伪造密码体系 | `[x]` 2026-08-11 |
+| WEBFIX-011 | ADMIN 全部采购清单与供应商只读查询 | WEBFIX-010 | 全局分页/搜索/筛选/详情；无审批、采购、入库写入口 | `[x]` 2026-08-11 |
+| WEBFIX-012 | Agent 受控 `ui_context` 契约与权威事实回查 | WEBFIX-002 | 仅 page_type/requirement_id；Tool 重新查询；draft 明确非权威 | `[x]` 2026-08-11 |
+| WEBFIX-013 | 通用 Context Assistant Drawer、快捷问题和建议应用表单 | WEBFIX-012 | 详情/审批/采购按角色复用；应用只改草稿；提交仍由用户确认 | `[x]` 2026-08-11 |
+| WEBFIX-014 | 全站业务 UI 审计与真实浏览器完整 E2E | WEBFIX-001–013 | 需求列出的 Agent、岗位、供应商、ADMIN、权限、控制台全部通过 | `[x]` 2026-08-11 |
+
+**完成结果（2026-08-11）**：Agent 已使用真实 SSE 契约贯通 Agent Service、Backend BFF 与 React，浏览器知识问答可持续展示检索状态并在 CPU RAG 完成后返回正文及 5 条来源；实时、Hybrid、复杂分析与 Primary/Fallback 均已通过正式 Graph Trace 验证。审批、驳回、采购、入库三类岗位写操作均继续携带 `expected_version`/`action_token` 并由 Backend 状态机校验；入库数量 `< / = / >` 三个边界已回归。供应商默认分页、远程名称选择、楼宇风险和 ADMIN 员工管理/全局只读查询均使用正式 API。上下文助手只传 `page_type`、`requirement_id` 和明确标记的 `user_draft`，事实由 Tool 回查；结构化候选只预填当前表单，不自动写业务状态。新增 Alembic `ef82a4d11c73` 管理管理员操作审计日志；当前身份仍为平台身份/HMAC，不伪造本地密码。全量 Pytest、Ruff、TypeScript、ESLint、Vitest、Production Build 和真实浏览器回归通过；全新浏览器页面控制台 warning/error 为 0。当前演示库没有非 TEST 历史采购，供应商推荐会如实返回空候选，未使用 Mock 填充。
 
 ---
 
@@ -553,11 +633,11 @@ Markdown，不合并成长文档；业务实时事实继续只由采购后端 To
 
 当前应按批次执行：
 
-1. 阶段 20 已完成并验收；等待用户回复“继续”后进入阶段 21。
-2. 阶段 21 将完成 Compose 全栈部署、真实 7 文档索引与检索、Web 端到端、安全与故障降级、
-   评测汇总和最终交付文档。
-3. 阶段 21 最终端到端验收需要配置真实主 LLM Provider；Embedding 与 Reranker 本地模型已具备，
-   但若仍无主 LLM API Key/模型额度，将如实把线上模型相关验收标记为 `[!]`，继续完成其余交付项。
+1. 阶段 23 的 WEBFIX-001 → WEBFIX-014 已全部完成；后续回到阶段 21 的 Compose 全栈部署、安全、备份恢复与最终交付，不进入办公平台接入。
+2. 阶段 21 的 Compose 全栈部署、安全与故障降级、备份恢复、评测汇总和最终交付文档继续保留，
+   不在本次前端阶段扩展处理。
+3. 真实主 LLM Provider、Embedding、Reranker、7 文档 Qdrant 索引和三类核心 Agent 路径均已完成
+   实际调用验收；仍需持续观察远程模型超时及 Fallback 偶发空结构化正文。
 
 当前 7 份 Markdown 作为知识库唯一源文件，Word 文件仅用于阅读、汇报和展示。不得跳过 Metadata、
 权限和可追溯性约束。知识库 MySQL 表由知识同步边界管理；Agent 的业务 Tool/MCP 仍不得直接访问

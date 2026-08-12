@@ -107,9 +107,13 @@ class FakeStore:
 
 
 class FakeRepository:
-    def __init__(self, parents: list[object]) -> None:
+    def __init__(self, parents: list[object], *, knowledge_version: str = "v1") -> None:
         self.parents = parents
+        self.knowledge_version = knowledge_version
         self.requested: list[str] = []
+
+    async def get_ready_knowledge_version(self, _session):
+        return self.knowledge_version
 
     async def get_ready_parents_by_ids(self, _session, parent_ids):
         self.requested.extend(parent_ids)
@@ -127,11 +131,22 @@ class FakeSession:
 class Rewriter:
     def __init__(self, result: str | Exception) -> None:
         self.result = result
+        self.calls = 0
 
     async def rewrite(self, _query: str) -> str:
+        self.calls += 1
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
+
+
+def test_query_rewrite_skip_policy_is_conservative() -> None:
+    from agent_app.rag.query_policy import can_skip_query_rewrite
+
+    assert can_skip_query_rewrite("采购申请被楼长驳回后应该怎么办？") is True
+    assert can_skip_query_rewrite("这个申请应该怎么办？") is False
+    assert can_skip_query_rewrite("采购申请如何提交，并且需要哪些附件？") is False
+    assert can_skip_query_rewrite("继续") is False
 
 
 @pytest.mark.asyncio
@@ -160,7 +175,7 @@ async def test_hybrid_retrieval_reranks_and_selectively_expands_parent() -> None
     )
 
     result = await retriever.retrieve(
-        "采购申请如何提交？",
+        "这个申请应该如何提交？",
         filters=RetrievalFilters(allowed_roles=["APPLICANT"]),
     )
 
@@ -197,11 +212,11 @@ async def test_rewrite_failure_falls_back_to_original_and_empty_results_skip_rer
     )
 
     result = await retriever.retrieve(
-        "  黑名单 如何 核实  ",
+        "  这个黑名单记录 如何 核实  ",
         filters=RetrievalFilters(allowed_roles=["PURCHASER"]),
     )
 
-    assert result.rewritten_query == "黑名单 如何 核实"
+    assert result.rewritten_query == "这个黑名单记录 如何 核实"
     assert result.rewrite_applied is False
     assert "provider unavailable" in result.rewrite_error
     assert result.evidences == []
@@ -272,3 +287,93 @@ async def test_low_reranker_scores_produce_no_citation_or_context() -> None:
     assert result.context == ""
     assert result.trace.trace_id == "trace-low-score"
     assert len(result.trace.rerank_candidates) == 1
+
+
+@pytest.mark.asyncio
+async def test_cache_layers_keep_embedding_permission_agnostic_and_retrieval_scoped() -> None:
+    child = payload(str(uuid4()), str(uuid4()))
+    models_provider = FakeModels([0.9])
+    store = FakeStore([point(child, 0.8)])
+    retriever = KnowledgeRetriever(
+        settings=settings(),
+        session_factory=FakeSession,
+        model_provider=models_provider,
+        qdrant_store=store,
+        repository=FakeRepository([]),
+    )
+
+    applicant = await retriever.retrieve(
+        "采购申请如何提交？",
+        filters=RetrievalFilters(allowed_roles=["APPLICANT"]),
+    )
+    purchaser = await retriever.retrieve(
+        "采购申请如何提交？",
+        filters=RetrievalFilters(allowed_roles=["PURCHASER"]),
+    )
+    applicant_cached = await retriever.retrieve(
+        "采购申请如何提交？",
+        filters=RetrievalFilters(allowed_roles=["APPLICANT"]),
+    )
+
+    assert len(models_provider.embedded) == 1
+    assert applicant.trace.embedding_cache_hit is False
+    assert purchaser.trace.embedding_cache_hit is True
+    assert purchaser.trace.retrieval_cache_hit is False
+    assert applicant_cached.trace.embedding_cache_hit is True
+    assert applicant_cached.trace.retrieval_cache_hit is True
+    assert len(store.calls) == 6
+
+
+@pytest.mark.asyncio
+async def test_knowledge_version_invalidates_retrieval_but_not_embedding_cache() -> None:
+    child = payload(str(uuid4()), str(uuid4()))
+    models_provider = FakeModels([0.9])
+    store = FakeStore([point(child, 0.8)])
+    repository = FakeRepository([])
+    retriever = KnowledgeRetriever(
+        settings=settings(),
+        session_factory=FakeSession,
+        model_provider=models_provider,
+        qdrant_store=store,
+        repository=repository,
+    )
+    filters = RetrievalFilters(allowed_roles=["APPLICANT"])
+
+    await retriever.retrieve("采购申请如何提交？", filters=filters)
+    repository.knowledge_version = "v2"
+    refreshed = await retriever.retrieve("采购申请如何提交？", filters=filters)
+
+    assert refreshed.trace.embedding_cache_hit is True
+    assert refreshed.trace.retrieval_cache_hit is False
+    assert refreshed.trace.knowledge_version == "v2"
+    assert len(models_provider.embedded) == 1
+    assert len(store.calls) == 6
+
+
+@pytest.mark.asyncio
+async def test_rewrite_cache_uses_query_context_and_model_identity() -> None:
+    rewriter = Rewriter("采购申请驳回处理流程")
+    retriever = KnowledgeRetriever(
+        settings=settings(),
+        session_factory=FakeSession,
+        model_provider=FakeModels([]),
+        qdrant_store=FakeStore([]),
+        repository=FakeRepository([]),
+        query_rewriter=rewriter,
+    )
+    filters = RetrievalFilters(allowed_roles=["APPLICANT"])
+
+    first = await retriever.retrieve(
+        "这个申请怎么办？", filters=filters, rewrite_context="conversation-a"
+    )
+    second = await retriever.retrieve(
+        "这个申请怎么办？", filters=filters, rewrite_context="conversation-a"
+    )
+    third = await retriever.retrieve(
+        "这个申请怎么办？", filters=filters, rewrite_context="conversation-b"
+    )
+
+    assert first.trace.rewrite_cache_hit is False
+    assert second.trace.rewrite_cache_hit is True
+    assert third.trace.rewrite_cache_hit is False
+    assert rewriter.calls == 2

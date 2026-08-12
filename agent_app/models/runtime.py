@@ -11,8 +11,10 @@ from agent_app.resilience import AsyncCircuitBreaker
 
 class ModelRuntimeStatus(StrEnum):
     NOT_CONFIGURED = "NOT_CONFIGURED"
+    INITIALIZING = "INITIALIZING"
     READY = "READY"
     PROVIDER_NOT_REGISTERED = "PROVIDER_NOT_REGISTERED"
+    INITIALIZATION_FAILED = "INITIALIZATION_FAILED"
 
 
 class ModelRuntimeUnavailable(RuntimeError):
@@ -28,6 +30,7 @@ class ModelRuntime:
     status: ModelRuntimeStatus
     runner: StructuredModelRunner | None
     usage_ledger: ModelUsageLedger
+    initialization_error: str | None = None
 
     @classmethod
     def from_settings(
@@ -52,28 +55,57 @@ class ModelRuntime:
                 runner=None,
                 usage_ledger=ledger,
             )
-        adapter = registry.build(configuration)
+        try:
+            primary_adapter = registry.build(
+                configuration.model_copy(update={"fallback_model": None})
+            )
+            fallback_adapter = None
+            if configuration.fallback_model:
+                fallback_adapter = registry.build(
+                    configuration.model_copy(
+                        update={
+                            "model": configuration.fallback_model,
+                            "fallback_model": None,
+                        }
+                    )
+                )
+        except Exception as exc:
+            return cls(
+                configuration=configuration,
+                status=ModelRuntimeStatus.INITIALIZATION_FAILED,
+                runner=None,
+                usage_ledger=ledger,
+                initialization_error=f"{type(exc).__name__}: {exc}",
+            )
         return cls(
             configuration=configuration,
             status=ModelRuntimeStatus.READY,
             runner=StructuredModelRunner(
-                adapter,
+                primary_adapter,
                 timeout_seconds=settings.model_timeout_seconds,
                 max_retries=settings.model_structured_output_retries,
                 circuit_breaker=AsyncCircuitBreaker(
                     failure_threshold=settings.model_circuit_failure_threshold,
-                    recovery_timeout_seconds=(settings.model_circuit_recovery_timeout_seconds),
+                    recovery_timeout_seconds=settings.model_circuit_recovery_timeout_seconds,
                 ),
                 usage_ledger=ledger,
+                fallback_adapter=fallback_adapter,
+                primary_model=configuration.model,
             ),
             usage_ledger=ledger,
         )
+
+    async def aclose(self) -> None:
+        if self.runner is not None:
+            await self.runner.aclose()
 
     def require_runner(self) -> StructuredModelRunner:
         if self.runner is None:
             messages = {
                 ModelRuntimeStatus.NOT_CONFIGURED: "生成模型尚未配置",
-                ModelRuntimeStatus.PROVIDER_NOT_REGISTERED: "生成模型供应商适配器尚未注册",
+                ModelRuntimeStatus.INITIALIZING: "生成模型正在初始化",
+                ModelRuntimeStatus.PROVIDER_NOT_REGISTERED: "生成模型 Provider 尚未注册",
+                ModelRuntimeStatus.INITIALIZATION_FAILED: "生成模型初始化失败",
             }
             raise ModelRuntimeUnavailable(self.status, messages[self.status])
         return self.runner

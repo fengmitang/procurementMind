@@ -16,6 +16,7 @@ class DemoAgentChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
     external_conversation_id: str | None = Field(default=None, max_length=150)
     external_message_id: str | None = Field(default=None, max_length=150)
+    ui_context: dict[str, Any] | None = None
 
 
 class DemoAgentActionRequest(BaseModel):

@@ -16,7 +16,10 @@ from agent_app.graph.memory import GraphMemoryMapper
 from agent_app.graph.schemas import GraphRunRequest, RouteType
 from agent_app.graph.service import ProcurementGraphService
 from agent_app.mcp.schemas import MCPToolResponse
-from agent_app.models.runner import StructuredModelRunError
+from agent_app.models.fake import ScriptedModelAdapter
+from agent_app.models.protocols import ModelPurpose, StructuredModelResponse
+from agent_app.models.roles import StructuredModelRoles
+from agent_app.models.runner import StructuredModelRunError, StructuredModelRunner
 from agent_app.schemas.analytics import AnalyticsAggregation, AnalyticsGroupBy
 from agent_app.schemas.backend import (
     BackendIdentity,
@@ -185,7 +188,23 @@ async def test_planner_creates_parallel_multi_tool_plan() -> None:
         AnalysisToolName.GET_SUPPLIER_PERFORMANCE,
         AnalysisToolName.GET_SIMILAR_CASES,
     ]
+
+
+@pytest.mark.asyncio
+async def test_planner_uses_controlled_supplier_recommendation_tool() -> None:
+    plan = await DeterministicAnalysisPlanner().create_plan("为采购申请 91003 推荐供应商")
+
+    assert plan.steps[0].tool is AnalysisToolName.RECOMMEND_SUPPLIERS
+    assert plan.steps[0].arguments == {"requirement_id": 91003, "limit": 10}
     assert all(step.independent for step in plan.steps)
+
+
+def test_context_single_tool_shortcuts_skip_model_planner() -> None:
+    assert ProcurementGraphService._should_use_model_planner("为采购申请 91003 推荐供应商") is False
+    assert (
+        ProcurementGraphService._should_use_model_planner("查看采购申请 91003 的相似案例") is False
+    )
+    assert ProcurementGraphService._should_use_model_planner("统计各楼宇采购金额并比较趋势") is True
 
 
 @pytest.mark.asyncio
@@ -401,3 +420,103 @@ async def test_model_failure_keeps_error_code_and_never_claims_analysis_complete
     assert result.analysis is None
     assert result.tool_call_count == 0
     assert result.reply == "暂时无法完成采购分析：模型服务熔断中。"
+
+
+@pytest.mark.asyncio
+async def test_complex_query_calls_model_planner_and_records_plan_trace() -> None:
+    client = FakeAnalysisClient()
+
+    @asynccontextmanager
+    async def factory(*_args):
+        yield client
+
+    outputs = [
+        {
+            "goal": "统计采购数量和金额",
+            "steps": [
+                {
+                    "step_id": "purchase_summary",
+                    "objective": "查询采购聚合数据",
+                    "tool": "query_purchase_analytics",
+                    "arguments": {
+                        "query": {
+                            "group_by": "BUILDING",
+                            "aggregations": ["COUNT", "TOTAL_AMOUNT"],
+                            "page": 1,
+                            "page_size": 20,
+                        }
+                    },
+                    "depends_on": [],
+                    "independent": False,
+                }
+            ],
+            "termination_condition": "聚合数据返回",
+            "revision_count": 0,
+            "query_context": {
+                "group_by": "BUILDING",
+                "aggregations": ["COUNT", "TOTAL_AMOUNT"],
+                "page": 1,
+                "page_size": 20,
+            },
+        },
+        {
+            "answer": "已根据实时工具结果完成统计。",
+            "citations": [],
+            "limitations": [],
+            "requires_human_confirmation": False,
+        },
+        {
+            "passed": False,
+            "issues": [
+                {
+                    "code": "ANALYSIS_AS_FACT",
+                    "severity": "BLOCKING",
+                    "message": "需要把分析范围说明清楚",
+                    "evidence_ids": [],
+                }
+            ],
+            "requires_human_confirmation": False,
+            "revised_answer": "已按后端可见数据完成统计，并明确限定统计范围。",
+        },
+    ]
+    adapter = ScriptedModelAdapter(
+        [
+            StructuredModelResponse(
+                provider="fake",
+                model="planner-model",
+                output=output,
+                latency_ms=1,
+            )
+            for output in outputs
+        ]
+    )
+    roles = StructuredModelRoles(
+        StructuredModelRunner(adapter, timeout_seconds=1, max_retries=0),
+        "trace-analysis",
+    )
+    configured = AgentSettings(
+        _env_file=None,
+        identity_gateway_secret="analysis-test-secret-123",
+        procurement_backend_url="http://backend.test",
+    )
+
+    result = await ProcurementGraphService(
+        configured,
+        mcp_client_factory=factory,
+        model_roles=roles,
+    ).run(graph_request("统计各楼宇采购数量和总金额"))
+
+    assert [request.purpose for request in adapter.requests] == [
+        ModelPurpose.ANALYSIS_PLAN,
+        ModelPurpose.COMPOSE,
+        ModelPurpose.REVIEW,
+    ]
+    planner_trace = next(item for item in result.trace_events if item.name == "model_planner")
+    assert planner_trace.result["planner_called"] is True
+    assert planner_trace.result["model_used"] is True
+    assert planner_trace.result["actual_model"] == "planner-model"
+    assert planner_trace.result["plan"]["steps"][0]["tool"] == "query_purchase_analytics"
+    assert result.reply == "已按后端可见数据完成统计，并明确限定统计范围。"
+    review_trace = next(item for item in result.trace_events if item.name == "review")
+    assert review_trace.result["review_output_enforced"] is True
+    assert review_trace.result["revised_answer_used"] is True

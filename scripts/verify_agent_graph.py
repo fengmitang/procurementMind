@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 from agent_app.core.config import get_agent_settings  # noqa: E402
 from agent_app.graph.schemas import GraphRunRequest  # noqa: E402
 from agent_app.graph.service import ProcurementGraphService  # noqa: E402
-from agent_app.rag.models import initialize_local_rag_models  # noqa: E402
+from agent_app.rag.models import initialize_rag_providers  # noqa: E402
 from agent_app.rag.qdrant import QdrantKnowledgeStore  # noqa: E402
 from agent_app.rag.retriever import KnowledgeRetriever  # noqa: E402
 from agent_app.schemas.backend import (  # noqa: E402
@@ -25,7 +25,7 @@ from app.db.session import async_session_factory, engine  # noqa: E402
 
 async def verify(query: str, role: str) -> dict:
     settings = get_agent_settings()
-    models = await asyncio.to_thread(initialize_local_rag_models, settings)
+    models = await asyncio.to_thread(initialize_rag_providers, settings)
     if models is None:
         raise RuntimeError("本地 RAG 模型尚未配置")
     store = QdrantKnowledgeStore(settings)
@@ -78,6 +78,8 @@ async def verify(query: str, role: str) -> dict:
         }
     finally:
         await store.close()
+        if models is not None:
+            models.close()
         await engine.dispose()
 
 

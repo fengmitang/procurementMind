@@ -17,10 +17,34 @@ class SupplierSummaryData(BaseModel):
     supplier_name: str
     unified_social_credit_code: str | None
     blacklist_status: str
+    status: bool
 
 
 class SupplierSearchData(BaseModel):
     items: list[SupplierSummaryData]
+    page: int
+    page_size: int
+    total: int
+
+
+class SupplierRiskItem(BaseModel):
+    blacklist_id: int
+    supplier_id: int
+    supplier_name: str
+    blacklist_type: str
+    risk_reason: str
+    status: str
+    start_at: datetime
+    end_at: datetime | None
+    released_at: datetime | None
+    release_reason: str | None
+    is_effective: bool
+    source_requirement_id: int
+    source_requirement_no: str
+
+
+class SupplierRiskListData(BaseModel):
+    items: list[SupplierRiskItem]
     page: int
     page_size: int
     total: int

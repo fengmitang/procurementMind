@@ -1,3 +1,4 @@
+import hashlib
 from collections.abc import Sequence
 
 from sqlalchemy import delete, select
@@ -7,6 +8,35 @@ from app.models.knowledge import KnowledgeDocument, KnowledgeParent
 
 
 class KnowledgeRepository:
+    async def get_ready_knowledge_version(self, session: AsyncSession) -> str:
+        rows = (
+            await session.execute(
+                select(
+                    KnowledgeDocument.document_id,
+                    KnowledgeDocument.version,
+                    KnowledgeDocument.content_hash,
+                    KnowledgeDocument.indexed_at,
+                )
+                .where(
+                    KnowledgeDocument.status == "ACTIVE",
+                    KnowledgeDocument.index_status == "READY",
+                )
+                .order_by(KnowledgeDocument.document_id)
+            )
+        ).all()
+        payload = "\n".join(
+            "|".join(
+                (
+                    str(document_id),
+                    str(version),
+                    str(content_hash),
+                    indexed_at.isoformat() if indexed_at is not None else "",
+                )
+            )
+            for document_id, version, content_hash, indexed_at in rows
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
     async def list_documents(self, session: AsyncSession) -> Sequence[KnowledgeDocument]:
         return (
             await session.scalars(select(KnowledgeDocument).order_by(KnowledgeDocument.source_path))

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from uuid import uuid4
@@ -32,6 +33,11 @@ class PreparedChat:
     identity: BackendIdentity
     conversation_id: int
     graph_request: GraphRunRequest
+    timings: dict[str, int]
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, round((time.perf_counter() - started) * 1000))
 
 
 def _validate_development_identity(payload: ChatRequest, request: Request) -> None:
@@ -55,6 +61,8 @@ async def _prepare_chat(
     request: Request,
     client: ProcurementBackendClient,
 ) -> PreparedChat:
+    prepare_started = time.perf_counter()
+    timings: dict[str, int] = {}
     _validate_development_identity(payload, request)
     trace_id = trace_id_context.get() or str(uuid4())
     task_id = uuid4()
@@ -62,13 +70,18 @@ async def _prepare_chat(
         platform_type=payload.platform_type,
         platform_user_id=payload.platform_user_id,
     )
+    call_started = time.perf_counter()
     current_user = await client.get_current_user(identity, trace_id)
+    timings["prepare_identity_ms"] = _elapsed_ms(call_started)
+    call_started = time.perf_counter()
     conversation = await client.get_or_create_active_conversation(
         identity,
         current_action="CHAT",
         trace_id=trace_id,
         external_conversation_id=payload.external_conversation_id,
     )
+    timings["prepare_conversation_ms"] = _elapsed_ms(call_started)
+    call_started = time.perf_counter()
     await client.add_conversation_message(
         identity,
         conversation.conversation_id,
@@ -77,11 +90,15 @@ async def _prepare_chat(
         external_message_id=payload.external_message_id or f"user:{task_id}",
         trace_id=trace_id,
     )
+    timings["prepare_user_message_ms"] = _elapsed_ms(call_started)
+    call_started = time.perf_counter()
     restored_state = await client.get_conversation_state(
         identity,
         conversation.conversation_id,
         trace_id,
     )
+    timings["prepare_state_ms"] = _elapsed_ms(call_started)
+    timings["prepare_total_ms"] = _elapsed_ms(prepare_started)
     return PreparedChat(
         identity=identity,
         conversation_id=conversation.conversation_id,
@@ -95,6 +112,7 @@ async def _prepare_chat(
             ui_context=payload.ui_context,
             restored_state=restored_state,
         ),
+        timings=timings,
     )
 
 
@@ -120,7 +138,11 @@ async def _run_graph(
         ) from exc
 
 
-def _build_chat_data(request: Request, result: GraphRunResult) -> ChatData:
+def _build_chat_data(
+    request: Request,
+    result: GraphRunResult,
+    performance: dict[str, int] | None = None,
+) -> ChatData:
     settings = request.app.state.agent_settings
     return ChatData(
         task_id=result.task_id,
@@ -142,6 +164,7 @@ def _build_chat_data(request: Request, result: GraphRunResult) -> ChatData:
         review=result.review,
         evidence_sufficient=result.evidence_sufficient,
         pending_action=result.pending_action,
+        performance=performance or {},
     )
 
 
@@ -149,7 +172,9 @@ async def _persist_result(
     prepared: PreparedChat,
     result: GraphRunResult,
     client: ProcurementBackendClient,
-) -> None:
+) -> dict[str, int]:
+    persist_started = time.perf_counter()
+    timings: dict[str, int] = {}
     graph_request = prepared.graph_request
     logger.info(
         "agent_graph_completed trace_id=%s conversation_id=%s route=%s path=%s tools=%s "
@@ -162,6 +187,7 @@ async def _persist_result(
         len(result.evidence),
         [item.code for item in result.errors],
     )
+    call_started = time.perf_counter()
     await client.add_conversation_message(
         prepared.identity,
         prepared.conversation_id,
@@ -170,19 +196,31 @@ async def _persist_result(
         external_message_id=f"agent:{graph_request.task_id}",
         trace_id=graph_request.trace_id,
     )
+    timings["persist_agent_message_ms"] = _elapsed_ms(call_started)
     backend_state = GraphMemoryMapper.to_backend_state(graph_request, result)
+    call_started = time.perf_counter()
     await client.save_conversation_state(
         prepared.identity,
         prepared.conversation_id,
         backend_state,
         graph_request.trace_id,
     )
+    timings["persist_state_ms"] = _elapsed_ms(call_started)
+    call_started = time.perf_counter()
     await client.save_conversation_snapshot(
         prepared.identity,
         prepared.conversation_id,
         snapshot_reason="GRAPH_RUN_COMPLETED",
         trace_id=graph_request.trace_id,
     )
+    timings["persist_snapshot_ms"] = _elapsed_ms(call_started)
+    timings["persist_total_ms"] = _elapsed_ms(persist_started)
+    logger.info(
+        "agent_persistence_completed trace_id=%s timings=%s",
+        graph_request.trace_id,
+        timings,
+    )
+    return timings
 
 
 @router.post("", response_model=AgentApiResponse[ChatData])
@@ -192,10 +230,20 @@ async def chat(
     client: ProcurementBackendClientDependency,
     graph_service: ProcurementGraphServiceDependency,
 ) -> AgentApiResponse[ChatData]:
+    request_started = time.perf_counter()
     prepared = await _prepare_chat(payload, request, client)
     result = await _run_graph(request, graph_service, prepared.graph_request)
-    await _persist_result(prepared, result, client)
-    return AgentApiResponse(message="回答已生成", data=_build_chat_data(request, result))
+    persist_timings = await _persist_result(prepared, result, client)
+    performance = {
+        **prepared.timings,
+        "graph_total_ms": result.duration_ms,
+        **persist_timings,
+        "request_total_ms": _elapsed_ms(request_started),
+    }
+    return AgentApiResponse(
+        message="回答已生成",
+        data=_build_chat_data(request, result, performance),
+    )
 
 
 def _sse(event: str, data: dict[str, object]) -> str:
@@ -209,6 +257,7 @@ async def chat_stream(
     client: ProcurementBackendClientDependency,
     graph_service: ProcurementGraphServiceDependency,
 ) -> StreamingResponse:
+    request_started = time.perf_counter()
     prepared = await _prepare_chat(payload, request, client)
 
     async def generate() -> AsyncIterator[str]:
@@ -225,8 +274,14 @@ async def chat_stream(
                     prepared.graph_request,
                     handle_graph_event,
                 )
-                await _persist_result(prepared, result, client)
-                chat_data = _build_chat_data(request, result)
+                persist_timings = await _persist_result(prepared, result, client)
+                performance = {
+                    **prepared.timings,
+                    "graph_total_ms": result.duration_ms,
+                    **persist_timings,
+                    "request_total_ms": _elapsed_ms(request_started),
+                }
+                chat_data = _build_chat_data(request, result, performance)
                 for evidence in result.knowledge.evidences if result.knowledge else []:
                     await queue.put(
                         (

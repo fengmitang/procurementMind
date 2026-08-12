@@ -53,6 +53,8 @@ async def test_openai_compatible_adapter_forwards_real_structured_deltas() -> No
     async def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         assert body["stream"] is True
+        assert body["enable_thinking"] is False
+        assert body["max_tokens"] == 512
         return httpx.Response(
             200,
             headers={"content-type": "text/event-stream"},
@@ -77,6 +79,8 @@ async def test_openai_compatible_adapter_forwards_real_structured_deltas() -> No
         trace_id="trace-stream",
         messages=[ModelMessage(role="user", content="test")],
         response_schema=ComposeOutput.model_json_schema(mode="serialization"),
+        max_output_tokens=512,
+        enable_thinking=False,
     )
 
     async def collect_delta(value: str) -> None:

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import TypeVar, cast
 
@@ -82,6 +83,7 @@ class StructuredModelRunner:
         output_type: type[OutputT],
         delta_handler: Callable[[str], Awaitable[None]] | None = None,
     ) -> tuple[OutputT, StructuredModelResponse, int]:
+        run_started = time.perf_counter()
         expected_schema = output_type.model_json_schema(mode="serialization")
         if request.response_schema != expected_schema:
             raise StructuredModelRunError(
@@ -219,6 +221,7 @@ class StructuredModelRunner:
                     continue
 
             assert response is not None
+            validation_started = time.perf_counter()
             try:
                 parsed = output_type.model_validate(response.output)
             except ValidationError as exc:
@@ -241,6 +244,17 @@ class StructuredModelRunner:
                 if emitted_delta:
                     raise last_error from None
             else:
+                schema_validation_ms = max(
+                    0, round((time.perf_counter() - validation_started) * 1000)
+                )
+                runner_latency_ms = max(0, round((time.perf_counter() - run_started) * 1000))
+                response = response.model_copy(
+                    update={
+                        "schema_validation_ms": schema_validation_ms,
+                        "runner_latency_ms": runner_latency_ms,
+                        "retry_overhead_ms": max(0, runner_latency_ms - response.latency_ms),
+                    }
+                )
                 if self.usage_ledger is not None:
                     self.usage_ledger.record(request.purpose, response, attempt)
                 return parsed, response, attempt

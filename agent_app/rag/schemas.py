@@ -142,6 +142,24 @@ class ParentLookupTrace(BaseModel):
     expanded: bool
 
 
+class RetrievalTimings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    knowledge_version_ms: int = Field(default=0, ge=0)
+    rewrite_ms: int = Field(default=0, ge=0)
+    embedding_ms: int = Field(default=0, ge=0)
+    filter_build_ms: int = Field(default=0, ge=0)
+    dense_query_ms: int = Field(default=0, ge=0)
+    sparse_query_ms: int = Field(default=0, ge=0)
+    hybrid_query_ms: int = Field(default=0, ge=0)
+    retrieval_wall_ms: int = Field(default=0, ge=0)
+    candidate_conversion_ms: int = Field(default=0, ge=0)
+    rerank_ms: int = Field(default=0, ge=0)
+    parent_db_ms: int = Field(default=0, ge=0)
+    context_build_ms: int = Field(default=0, ge=0)
+    total_ms: int = Field(default=0, ge=0)
+
+
 class RetrievalTrace(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -159,6 +177,12 @@ class RetrievalTrace(BaseModel):
     parent_lookups: list[ParentLookupTrace]
     citations: list[KnowledgeCitation]
     duration_ms: int = Field(ge=0)
+    timings: RetrievalTimings = Field(default_factory=RetrievalTimings)
+    rewrite_skipped: bool = False
+    rewrite_cache_hit: bool = False
+    embedding_cache_hit: bool = False
+    retrieval_cache_hit: bool = False
+    knowledge_version: str | None = None
 
 
 class RetrievalResult(BaseModel):

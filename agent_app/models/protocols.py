@@ -35,6 +35,7 @@ class StructuredModelRequest(BaseModel):
     response_schema: dict[str, JsonValue]
     temperature: float = Field(default=0, ge=0, le=2)
     max_output_tokens: int = Field(default=2000, ge=1, le=32000)
+    enable_thinking: bool | None = None
 
 
 class ModelUsage(BaseModel):
@@ -77,6 +78,13 @@ class StructuredModelResponse(BaseModel):
     actual_model: str | None = None
     fallback_used: bool = False
     fallback_reason: str | None = None
+    response_headers_ms: int | None = Field(default=None, ge=0)
+    first_token_ms: int | None = Field(default=None, ge=0)
+    transport_read_ms: int | None = Field(default=None, ge=0)
+    response_parse_ms: int = Field(default=0, ge=0)
+    schema_validation_ms: int = Field(default=0, ge=0)
+    runner_latency_ms: int | None = Field(default=None, ge=0)
+    retry_overhead_ms: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def populate_runtime_model_metadata(self) -> "StructuredModelResponse":

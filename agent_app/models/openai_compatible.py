@@ -55,20 +55,7 @@ class OpenAICompatibleStructuredAdapter:
                     "Content-Type": "application/json",
                     "X-Request-Id": request.trace_id,
                 },
-                json={
-                    "model": self.model,
-                    "messages": [item.model_dump(mode="json") for item in request.messages],
-                    "temperature": request.temperature,
-                    "max_tokens": request.max_output_tokens,
-                    "response_format": {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": f"procurement_{request.purpose.value.lower()}",
-                            "strict": True,
-                            "schema": self._provider_schema(request.response_schema),
-                        },
-                    },
-                },
+                json=self._payload(request, stream=False),
             )
         except httpx.TimeoutException as exc:
             raise ModelAdapterError("MODEL_TIMEOUT", "模型请求超时", retryable=True) from exc
@@ -77,10 +64,12 @@ class OpenAICompatibleStructuredAdapter:
                 "MODEL_TRANSPORT_ERROR", "模型网络请求失败", retryable=True
             ) from exc
         latency_ms = round((time.perf_counter() - started) * 1000)
+        parse_started = time.perf_counter()
         body = self._json_body(response)
         if response.is_error:
             raise self._response_error(response.status_code, body)
         output = self._structured_output(body)
+        response_parse_ms = round((time.perf_counter() - parse_started) * 1000)
         usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
         input_tokens = usage.get("prompt_tokens")
         output_tokens = usage.get("completion_tokens")
@@ -105,6 +94,8 @@ class OpenAICompatibleStructuredAdapter:
             ),
             primary_model=self.model,
             actual_model=actual_model,
+            transport_read_ms=latency_ms,
+            response_parse_ms=response_parse_ms,
         )
 
     async def complete_structured_stream(
@@ -117,6 +108,8 @@ class OpenAICompatibleStructuredAdapter:
         usage: dict[str, Any] = {}
         response_id: str | None = None
         actual_model = self.model
+        response_headers_ms: int | None = None
+        first_token_ms: int | None = None
         try:
             async with self.http_client.stream(
                 "POST",
@@ -126,23 +119,9 @@ class OpenAICompatibleStructuredAdapter:
                     "Content-Type": "application/json",
                     "X-Request-Id": request.trace_id,
                 },
-                json={
-                    "model": self.model,
-                    "messages": [item.model_dump(mode="json") for item in request.messages],
-                    "temperature": request.temperature,
-                    "max_tokens": request.max_output_tokens,
-                    "stream": True,
-                    "stream_options": {"include_usage": True},
-                    "response_format": {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": f"procurement_{request.purpose.value.lower()}",
-                            "strict": True,
-                            "schema": self._provider_schema(request.response_schema),
-                        },
-                    },
-                },
+                json=self._payload(request, stream=True),
             ) as response:
+                response_headers_ms = round((time.perf_counter() - started) * 1000)
                 if response.is_error:
                     raw = await response.aread()
                     try:
@@ -179,6 +158,8 @@ class OpenAICompatibleStructuredAdapter:
                     delta = choice.get("delta") if isinstance(choice, dict) else None
                     content = delta.get("content") if isinstance(delta, dict) else None
                     if isinstance(content, str) and content:
+                        if first_token_ms is None:
+                            first_token_ms = round((time.perf_counter() - started) * 1000)
                         content_parts.append(content)
                         await delta_handler(content)
         except ModelAdapterError:
@@ -195,7 +176,9 @@ class OpenAICompatibleStructuredAdapter:
             raise ModelAdapterError(
                 "MODEL_STRUCTURED_OUTPUT_EMPTY", "模型未返回结构化正文", retryable=False
             )
+        parse_started = time.perf_counter()
         output = self._structured_output({"choices": [{"message": {"content": content}}]})
+        response_parse_ms = round((time.perf_counter() - parse_started) * 1000)
         usage_model = ModelUsage()
         values = (
             usage.get("prompt_tokens"),
@@ -209,16 +192,47 @@ class OpenAICompatibleStructuredAdapter:
                 total_tokens=values[2],
                 source=ModelUsageSource.PROVIDER_REPORTED,
             )
+        latency_ms = round((time.perf_counter() - started) * 1000)
         return StructuredModelResponse(
             provider=str(self.configuration.provider or "openai_compatible"),
             model=actual_model,
             output=output,
             usage=usage_model,
-            latency_ms=round((time.perf_counter() - started) * 1000),
+            latency_ms=latency_ms,
             request_id=response_id,
             primary_model=self.model,
             actual_model=actual_model,
+            response_headers_ms=response_headers_ms,
+            first_token_ms=first_token_ms,
+            transport_read_ms=(
+                max(0, latency_ms - response_headers_ms)
+                if response_headers_ms is not None
+                else None
+            ),
+            response_parse_ms=response_parse_ms,
         )
+
+    def _payload(self, request: StructuredModelRequest, *, stream: bool) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": [item.model_dump(mode="json") for item in request.messages],
+            "temperature": request.temperature,
+            "max_tokens": request.max_output_tokens,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": f"procurement_{request.purpose.value.lower()}",
+                    "strict": True,
+                    "schema": self._provider_schema(request.response_schema),
+                },
+            },
+        }
+        if request.enable_thinking is not None:
+            payload["enable_thinking"] = request.enable_thinking
+        if stream:
+            payload["stream"] = True
+            payload["stream_options"] = {"include_usage": True}
+        return payload
 
     @staticmethod
     def _provider_schema(value: Any) -> Any:

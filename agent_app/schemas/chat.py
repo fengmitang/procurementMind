@@ -43,3 +43,4 @@ class ChatData(BaseModel):
     review: ReviewOutput | None = None
     evidence_sufficient: bool = False
     pending_action: PendingAction | None = None
+    performance: dict[str, int] = Field(default_factory=dict)

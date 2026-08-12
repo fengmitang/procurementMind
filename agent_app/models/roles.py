@@ -24,19 +24,47 @@ from agent_app.models.runner import StructuredModelRunError, StructuredModelRunn
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
 
+_ROLE_MAX_OUTPUT_TOKENS: dict[ModelPurpose, int] = {
+    ModelPurpose.ROUTER: 256,
+    ModelPurpose.QUERY_REWRITE: 256,
+    ModelPurpose.ANALYSIS_PLAN: 1200,
+    ModelPurpose.ANALYSIS_REPLAN: 1200,
+    ModelPurpose.COMPOSE: 1200,
+    ModelPurpose.REVIEW: 800,
+}
+_ROLE_THINKING: dict[ModelPurpose, bool | None] = {
+    ModelPurpose.ROUTER: False,
+    ModelPurpose.QUERY_REWRITE: False,
+    ModelPurpose.ANALYSIS_PLAN: None,
+    ModelPurpose.ANALYSIS_REPLAN: None,
+    ModelPurpose.COMPOSE: False,
+    ModelPurpose.REVIEW: False,
+}
+
 
 class StructuredModelRoles:
     """Provider-neutral structured entry points for the five model roles."""
 
-    def __init__(self, runner: StructuredModelRunner, trace_id: str) -> None:
+    def __init__(
+        self,
+        runner: StructuredModelRunner,
+        trace_id: str,
+        *,
+        performance_optimizations_enabled: bool = True,
+    ) -> None:
         self.runner = runner
         self.trace_id = trace_id
+        self.performance_optimizations_enabled = performance_optimizations_enabled
         self._trace_id_context: ContextVar[str] = ContextVar(
             f"model_trace_id_{id(self)}", default=trace_id
         )
         self._call_metadata: ContextVar[dict[ModelPurpose, dict[str, Any]] | None] = ContextVar(
             f"model_call_metadata_{id(self)}", default=None
         )
+
+    @property
+    def cache_identity(self) -> str:
+        return f"{self.runner.primary_model or 'configured-model'}|role-prompts-v2"
 
     def trace_metadata(self, purpose: ModelPurpose) -> dict[str, Any] | None:
         values = self._call_metadata.get() or {}
@@ -235,6 +263,16 @@ class StructuredModelRoles:
                 ),
             ],
             response_schema=output_type.model_json_schema(mode="serialization"),
+            max_output_tokens=(
+                _ROLE_MAX_OUTPUT_TOKENS[purpose]
+                if self.performance_optimizations_enabled
+                else 2000
+            ),
+            enable_thinking=(
+                _ROLE_THINKING[purpose]
+                if self.performance_optimizations_enabled
+                else None
+            ),
         )
         output, response, attempts = await self.runner.run(
             request, output_type, delta_handler=delta_handler
@@ -248,6 +286,16 @@ class StructuredModelRoles:
             "fallback_reason": response.fallback_reason,
             "attempts": attempts,
             "latency_ms": response.latency_ms,
+            "response_headers_ms": response.response_headers_ms,
+            "first_token_ms": response.first_token_ms,
+            "transport_read_ms": response.transport_read_ms,
+            "response_parse_ms": response.response_parse_ms,
+            "schema_validation_ms": response.schema_validation_ms,
+            "runner_latency_ms": response.runner_latency_ms,
+            "retry_overhead_ms": response.retry_overhead_ms,
+            "retry_count": max(0, attempts - 1),
+            "max_output_tokens": request.max_output_tokens,
+            "thinking_enabled": request.enable_thinking,
             "request_id": response.request_id,
         }
         self._call_metadata.set(values)
@@ -257,6 +305,10 @@ class StructuredModelRoles:
 class ModelQueryRewriteProvider:
     def __init__(self, roles: StructuredModelRoles) -> None:
         self.roles = roles
+
+    @property
+    def cache_identity(self) -> str:
+        return f"{self.roles.cache_identity}|query-rewrite-v2"
 
     async def rewrite(self, query: str) -> str:
         return (await self.roles.rewrite_query(query)).rewritten_query

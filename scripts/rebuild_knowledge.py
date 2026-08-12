@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 
 from agent_app.core.config import get_agent_settings  # noqa: E402
 from agent_app.rag.documents import MarkdownKnowledgeParser  # noqa: E402
-from agent_app.rag.models import initialize_local_rag_models  # noqa: E402
+from agent_app.rag.models import initialize_rag_providers  # noqa: E402
 from agent_app.rag.qdrant import QdrantKnowledgeStore  # noqa: E402
 from app.db.session import async_session_factory, engine  # noqa: E402
 from app.services.knowledge_sync import (  # noqa: E402
@@ -49,7 +49,7 @@ def result_payload(report: KnowledgeSyncReport) -> dict:
 async def run(args: argparse.Namespace) -> dict:
     settings = get_agent_settings()
     source_directory = settings.knowledge_source_directory.resolve()
-    models = initialize_local_rag_models(settings)
+    models = initialize_rag_providers(settings)
     if models is None:
         raise RuntimeError("Embedding/Reranker 本地模型尚未完整配置")
     store = QdrantKnowledgeStore(settings)
@@ -84,6 +84,8 @@ async def run(args: argparse.Namespace) -> dict:
         return result_payload(report)
     finally:
         await store.close()
+        if models is not None:
+            models.close()
         await engine.dispose()
 
 

@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from agent_app.core.config import get_agent_settings  # noqa: E402
-from agent_app.rag.models import initialize_local_rag_models  # noqa: E402
+from agent_app.rag.models import initialize_rag_providers  # noqa: E402
 from agent_app.rag.qdrant import QdrantKnowledgeStore  # noqa: E402
 from agent_app.rag.retriever import KnowledgeRetriever  # noqa: E402
 from agent_app.rag.schemas import RetrievalFilters  # noqa: E402
@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
 
 async def run(args: argparse.Namespace) -> dict:
     settings = get_agent_settings()
-    local_models = initialize_local_rag_models(settings)
+    local_models = initialize_rag_providers(settings)
     if local_models is None:
         raise RuntimeError("Embedding/Reranker 本地模型尚未完整配置")
     store = QdrantKnowledgeStore(settings)
@@ -85,6 +85,8 @@ async def run(args: argparse.Namespace) -> dict:
         }
     finally:
         await store.close()
+        if local_models is not None:
+            local_models.close()
         await engine.dispose()
 
 

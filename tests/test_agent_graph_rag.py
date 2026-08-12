@@ -243,6 +243,10 @@ async def test_configured_model_roles_are_used_for_route_and_compose() -> None:
     ).run(applicant_request("请帮我处理这个问题"))
 
     assert result.reply == "模型基于可见证据生成的回答 [K1]"
+    assert adapter.requests[0].max_output_tokens == 256
+    assert adapter.requests[0].enable_thinking is False
+    assert adapter.requests[1].max_output_tokens == 1200
+    assert adapter.requests[1].enable_thinking is False
     assert result.review is not None and result.review.passed is True
     assert [request.purpose for request in adapter.requests] == [
         ModelPurpose.ROUTER,

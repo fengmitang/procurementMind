@@ -1,3 +1,4 @@
+import json
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
@@ -376,11 +377,20 @@ class ProcurementGraphService:
                 started,
             )
         try:
-            result = await self.knowledge_retriever.retrieve(
-                state["message"],
-                filters=RetrievalFilters(allowed_roles=roles),
-                trace_id=state["trace_id"],
-            )
+            retrieval_filters = RetrievalFilters(allowed_roles=roles)
+            if getattr(self.knowledge_retriever, "supports_rewrite_context", False):
+                result = await self.knowledge_retriever.retrieve(
+                    state["message"],
+                    filters=retrieval_filters,
+                    trace_id=state["trace_id"],
+                    rewrite_context=self._rewrite_context(state),  # type: ignore[call-arg]
+                )
+            else:
+                result = await self.knowledge_retriever.retrieve(
+                    state["message"],
+                    filters=retrieval_filters,
+                    trace_id=state["trace_id"],
+                )
         except Exception:
             return self._knowledge_failure(
                 state,
@@ -411,6 +421,11 @@ class ProcurementGraphService:
                 "answerable": result.answerable,
                 "evidence_count": len(result.evidences),
                 "rewrite_applied": result.rewrite_applied,
+                "rewrite_skipped": result.trace.rewrite_skipped,
+                "rewrite_cache_hit": result.trace.rewrite_cache_hit,
+                "embedding_cache_hit": result.trace.embedding_cache_hit,
+                "retrieval_cache_hit": result.trace.retrieval_cache_hit,
+                "rag_timings": result.trace.timings.model_dump(mode="json"),
                 "retrieval_trace_id": result.trace.trace_id,
             },
         )
@@ -431,6 +446,16 @@ class ProcurementGraphService:
             )
             updates["errors"] = [*state["errors"], error.model_dump(mode="json")]
         return updates
+
+    @staticmethod
+    def _rewrite_context(state: GraphState) -> str:
+        value = {
+            "purchase_request_id": state.get("purchase_request_id"),
+            "analysis_query_context": state.get("analysis_query_context"),
+            "restored_from_snapshot": state.get("restored_from_snapshot", False),
+        }
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+
 
     async def _form_prefill_node(self, state: GraphState) -> dict[str, Any]:
         if state["step_count"] >= self.settings.max_execution_steps:

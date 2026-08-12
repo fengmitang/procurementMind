@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -24,6 +25,12 @@ class BGERerankerModel:
     @property
     def initialized(self) -> bool:
         return self._model is not None
+
+    @property
+    def reranker_cache_identity(self) -> str:
+        config = self.model_path / "config.json"
+        digest = hashlib.sha256(config.read_bytes()).hexdigest()[:16]
+        return f"{self.model_path}|{digest}|bge-reranker-v1"
 
     def initialize(self) -> BGERerankerModel:
         if self.initialized:
@@ -66,3 +73,18 @@ class BGERerankerModel:
         if isinstance(result, (float, int)):
             return [float(result)]
         return [float(score) for score in result]
+
+    def rerank(
+        self,
+        query: str,
+        documents: list[str],
+        *,
+        normalize: bool = True,
+        batch_size: int = 4,
+    ) -> list[float]:
+        return self.score(
+            query,
+            documents,
+            normalize=normalize,
+            batch_size=batch_size,
+        )

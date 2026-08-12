@@ -126,9 +126,12 @@ class GraphRunResult(BaseModel):
     review: ReviewOutput | None = None
     evidence_sufficient: bool = False
     pending_action: "PendingAction | None" = None
+    form_draft: dict[str, JsonValue] | None = None
+    form_missing_fields: list[str] = Field(default_factory=list)
 
 
 class HITLActionType(StrEnum):
+    CREATE_PURCHASE_DRAFT = "CREATE_PURCHASE_DRAFT"
     SUBMIT_PURCHASE_REQUEST = "SUBMIT_PURCHASE_REQUEST"
     APPROVE_PURCHASE_REQUEST = "APPROVE_PURCHASE_REQUEST"
     REJECT_PURCHASE_REQUEST = "REJECT_PURCHASE_REQUEST"
@@ -181,3 +184,5 @@ class GraphState(TypedDict, total=False):
     evidence_sufficient: bool
     pending_action: dict[str, JsonValue] | None
     compose_output: dict[str, JsonValue] | None
+    form_draft: dict[str, JsonValue] | None
+    form_missing_fields: list[str]

@@ -35,6 +35,13 @@ class GraphMemoryMapper:
             return None
 
     @staticmethod
+    def form_draft(request: GraphRunRequest) -> dict:
+        if request.restored_state is None:
+            return {}
+        value = request.restored_state.collected_data.get("form_draft")
+        return dict(value) if isinstance(value, dict) else {}
+
+    @staticmethod
     def to_backend_state(
         request: GraphRunRequest,
         result: GraphRunResult,
@@ -74,6 +81,12 @@ class GraphMemoryMapper:
             collected_data["pending_action"] = result.pending_action.model_dump(mode="json")
         else:
             collected_data.pop("pending_action", None)
+        if result.form_draft:
+            collected_data["form_draft"] = result.form_draft
+            collected_data["form_missing_fields"] = result.form_missing_fields
+        elif result.route is RouteType.FORM_PREFILL:
+            collected_data.pop("form_draft", None)
+            collected_data.pop("form_missing_fields", None)
         recent_messages = list(previous.recent_messages if previous else [])
         recent_messages.extend(
             [
@@ -93,8 +106,20 @@ class GraphMemoryMapper:
             purchase_request_id=result.purchase_request_id,
             current_action="CHAT",
             collected_data=collected_data,
-            missing_fields=["purchase_request_id"] if needs_request_id else [],
-            pending_field="purchase_request_id" if needs_request_id else None,
+            missing_fields=(
+                result.form_missing_fields
+                if result.route is RouteType.FORM_PREFILL
+                else ["requirement_reference"]
+                if needs_request_id
+                else []
+            ),
+            pending_field=(
+                result.form_missing_fields[0]
+                if result.route is RouteType.FORM_PREFILL and result.form_missing_fields
+                else "requirement_reference"
+                if needs_request_id
+                else None
+            ),
             awaiting_confirmation=result.pending_action is not None,
             recent_messages=recent_messages[-10:],
             last_recommendations=list(previous.last_recommendations if previous else []),

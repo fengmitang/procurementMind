@@ -253,7 +253,8 @@ def test_frontend_contains_rag_sources_and_hitl_controls() -> None:
     agent_client_source = (frontend / "src/services/agentClient.ts").read_text(encoding="utf-8")
 
     assert "Sources" in assistant_source
-    assert "knowledge?.citations" in assistant_source
+    assert "knowledge_sources" in assistant_source
+    assert "source_path" not in assistant_source
     assert "确认执行" in assistant_source
     assert "取消" in assistant_source
     assert "/demo-api/agent-actions/" in agent_client_source

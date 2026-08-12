@@ -24,9 +24,11 @@ from agent_app.schemas.backend import (
     BackendIdentity,
     BackendReadinessData,
     ConversationCompletedData,
+    ConversationListData,
     ConversationStateData,
     ConversationStatePayload,
     CurrentUserData,
+    FieldsSaveData,
     MessageCreatedData,
     MessageListData,
     ProductRecommendationData,
@@ -315,6 +317,7 @@ class ProcurementBackendClient:
         content: str,
         trace_id: str,
         external_message_id: str | None = None,
+        message_data: dict | None = None,
     ) -> MessageCreatedData:
         return await self._request(
             "POST",
@@ -326,7 +329,26 @@ class ProcurementBackendClient:
                 "external_message_id": external_message_id,
                 "sender_type": sender_type,
                 "content": content,
+                "message_data": message_data,
             },
+        )
+
+    async def list_conversations(
+        self,
+        identity: BackendIdentity,
+        trace_id: str,
+        *,
+        page: int = 1,
+        page_size: int = 30,
+    ) -> ConversationListData:
+        return await self._request(
+            "GET",
+            "/api/v1/agent/conversations",
+            ConversationListData,
+            trace_id=trace_id,
+            identity=identity,
+            params={"page": page, "page_size": page_size},
+            retryable=True,
         )
 
     async def list_conversation_messages(
@@ -423,6 +445,44 @@ class ProcurementBackendClient:
         trace_id: str,
     ) -> RequirementMutationData:
         """Execute an allow-listed business action through the procurement API."""
+        if action_type == "CREATE_PURCHASE_DRAFT":
+            created = await self._request(
+                "POST",
+                "/api/v1/requirements",
+                RequirementMutationData,
+                trace_id=trace_id,
+                identity=identity,
+                json={"building_id": int(draft["building_id"])},
+            )
+            fields = {
+                key: draft.get(key)
+                for key in (
+                    "device_profession",
+                    "device_name",
+                    "brand",
+                    "model",
+                    "quantity",
+                    "unit",
+                    "application_reason",
+                    "applicant_remark",
+                )
+                if draft.get(key) not in (None, "")
+            }
+            saved = await self._request(
+                "PATCH",
+                f"/api/v1/requirements/{created.requirement_id}/applicant-fields",
+                FieldsSaveData,
+                trace_id=trace_id,
+                identity=identity,
+                json={"expected_version": created.version, "fields": fields},
+            )
+            return RequirementMutationData(
+                requirement_id=saved.requirement_id,
+                requirement_no=created.requirement_no,
+                status=saved.status,
+                version=saved.version,
+                current_handler=created.current_handler,
+            )
         requirement_id = int(draft["requirement_id"])
         expected_version = int(draft["expected_version"])
         action_token = f"AGENT-{action_id}"[:64]

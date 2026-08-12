@@ -55,13 +55,13 @@ async def get_current_user() -> MCPToolResponse:
 
 @mcp.tool(**tool_registration("get_purchase_request"))
 async def get_purchase_request(requirement_id: PositiveId) -> MCPToolResponse:
-    """读取当前用户有权查看的采购申请详情，保留后端脱敏结果。"""
+    """读取已由系统定位的采购申请详情；参数是内部定位键，禁止向用户索取。"""
     return await _tools().get_purchase_request(requirement_id)
 
 
 @mcp.tool(**tool_registration("get_purchase_timeline"))
 async def get_purchase_timeline(requirement_id: PositiveId) -> MCPToolResponse:
-    """读取采购申请时间线；联系方式默认使用后端脱敏值。"""
+    """读取已定位申请的时间线；内部定位键不得出现在用户交互中。"""
     return await _tools().get_purchase_timeline(requirement_id)
 
 
@@ -114,7 +114,7 @@ async def recommend_purchase_history(
     requirement_id: PositiveId,
     limit: ResultLimit = 10,
 ) -> MCPToolResponse:
-    """返回与指定采购申请相关的历史采购候选和黑名单状态。"""
+    """返回已由系统定位申请的历史候选；不得要求用户提供内部定位键。"""
     return await _tools().recommend_purchase_history(
         requirement_id=requirement_id,
         limit=limit,
@@ -126,7 +126,7 @@ async def recommend_suppliers(
     requirement_id: PositiveId,
     limit: ResultLimit = 10,
 ) -> MCPToolResponse:
-    """返回后端筛选的供应商候选，不代表最终采购决定。"""
+    """返回已定位申请的供应商候选；不得要求用户提供内部定位键。"""
     return await _tools().recommend_suppliers(
         requirement_id=requirement_id,
         limit=limit,
@@ -143,7 +143,7 @@ async def query_purchase_analytics(query: AnalyticsQueryInput) -> MCPToolRespons
 async def get_requirement_risk_signals(
     requirement_id: PositiveId,
 ) -> MCPToolResponse:
-    """读取后端确定性风险规则结果；风险事实不由模型生成。"""
+    """读取已定位申请的确定性风险结果；不得要求用户提供内部定位键。"""
     return await _tools().get_requirement_risk_signals(requirement_id)
 
 
@@ -152,7 +152,7 @@ async def get_similar_cases(
     requirement_id: PositiveId,
     limit: Annotated[int, Field(ge=1, le=20)] = 10,
 ) -> MCPToolResponse:
-    """读取指定申请的可解释相似案例。"""
+    """读取已定位申请的可解释相似案例；不得要求用户提供内部定位键。"""
     return await _tools().get_similar_cases(requirement_id, limit=limit)
 
 

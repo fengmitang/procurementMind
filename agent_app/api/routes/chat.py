@@ -21,7 +21,12 @@ from agent_app.graph.schemas import GraphRunRequest, GraphRunResult
 from agent_app.graph.service import GraphStreamHandler, ProcurementGraphService
 from agent_app.observability import build_execution_details
 from agent_app.schemas.backend import BackendIdentity
-from agent_app.schemas.chat import ChatData, ChatRequest
+from agent_app.schemas.chat import (
+    BusinessResultData,
+    ChatData,
+    ChatRequest,
+    KnowledgeSourceData,
+)
 from agent_app.schemas.common import AgentApiResponse
 
 router = APIRouter(prefix="/chat", tags=["agent-chat"])
@@ -160,12 +165,118 @@ def _build_chat_data(
         ),
         analysis=result.analysis,
         risk_investigation=result.risk_investigation,
-        knowledge=result.knowledge,
+        knowledge=None,
+        knowledge_sources=_knowledge_sources(result),
+        business_results=_business_results(result),
+        form_draft=result.form_draft,
+        form_missing_fields=result.form_missing_fields,
         review=result.review,
         evidence_sufficient=result.evidence_sufficient,
         pending_action=result.pending_action,
         performance=performance or {},
     )
+
+
+def _knowledge_sources(result: GraphRunResult) -> list[KnowledgeSourceData]:
+    if result.knowledge is None:
+        return []
+    seen: set[tuple[str, tuple[str, ...]]] = set()
+    sources: list[KnowledgeSourceData] = []
+    for citation in result.knowledge.citations:
+        key = (citation.document_title, tuple(citation.section_path))
+        if key in seen:
+            continue
+        seen.add(key)
+        sources.append(
+            KnowledgeSourceData(
+                title=citation.document_title,
+                section_path=list(citation.section_path),
+            )
+        )
+    return sources
+
+
+def _business_results(result: GraphRunResult) -> list[BusinessResultData]:
+    rows = []
+    total: int | None = None
+    if result.analysis is not None and result.analysis.table is not None:
+        rows = result.analysis.table.rows
+        total = result.analysis.table.total
+    else:
+        search = next(
+            (
+                item
+                for item in reversed(result.tool_results)
+                if item.name == "search_purchase_records"
+                and item.success
+                and isinstance(item.data, dict)
+            ),
+            None,
+        )
+        if search is not None and isinstance(search.data, dict):
+            value = search.data.get("items", [])
+            rows = value if isinstance(value, list) else []
+            total_value = search.data.get("total")
+            total = int(total_value) if isinstance(total_value, int) else None
+    if not rows:
+        return []
+    if all(isinstance(item, dict) and item.get("requirement_no") for item in rows):
+        allowed = {
+            "requirement_id",
+            "requirement_no",
+            "device_name",
+            "brand",
+            "model",
+            "quantity",
+            "unit",
+            "status",
+            "created_at",
+            "current_handler_name",
+            "supplier_name",
+            "actual_total_price",
+        }
+        items = [{key: value for key, value in row.items() if key in allowed} for row in rows]
+        return [
+            BusinessResultData(
+                kind="PURCHASE_REQUIREMENTS",
+                title="采购申请",
+                items=items,
+                total=total,
+            )
+        ]
+    if all(isinstance(item, dict) and item.get("supplier_name") for item in rows):
+        allowed = {
+            "supplier_id",
+            "supplier_name",
+            "historical_purchase_count",
+            "last_purchase_at",
+            "blacklist_status",
+        }
+        items = [{key: value for key, value in row.items() if key in allowed} for row in rows]
+        return [
+            BusinessResultData(
+                kind="SUPPLIERS",
+                title="供应商",
+                items=items,
+                total=total,
+            )
+        ]
+    return []
+
+
+def _persisted_message_data(result: GraphRunResult) -> dict:
+    return {
+        "conversation_id": result.conversation_id,
+        "route": result.route.value,
+        "tool_call_count": result.tool_call_count,
+        "knowledge_sources": [item.model_dump(mode="json") for item in _knowledge_sources(result)],
+        "business_results": [item.model_dump(mode="json") for item in _business_results(result)],
+        "pending_action": (
+            result.pending_action.model_dump(mode="json") if result.pending_action else None
+        ),
+        "form_draft": result.form_draft,
+        "form_missing_fields": result.form_missing_fields,
+    }
 
 
 async def _persist_result(
@@ -194,6 +305,7 @@ async def _persist_result(
         sender_type="AGENT",
         content=result.reply,
         external_message_id=f"agent:{graph_request.task_id}",
+        message_data=_persisted_message_data(result),
         trace_id=graph_request.trace_id,
     )
     timings["persist_agent_message_ms"] = _elapsed_ms(call_started)
@@ -282,11 +394,11 @@ async def chat_stream(
                     "request_total_ms": _elapsed_ms(request_started),
                 }
                 chat_data = _build_chat_data(request, result, performance)
-                for evidence in result.knowledge.evidences if result.knowledge else []:
+                for source in _knowledge_sources(result):
                     await queue.put(
                         (
                             "citation",
-                            evidence.citation.model_dump(mode="json"),
+                            source.model_dump(mode="json"),
                         )
                     )
                 if result.tool_results:

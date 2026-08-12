@@ -112,6 +112,51 @@ async def test_compose_rejects_citation_not_present_in_visible_evidence() -> Non
     assert exc_info.value.retryable is False
 
 
+@pytest.mark.asyncio
+async def test_compose_rejects_internal_citation_marker_or_file_path_in_answer() -> None:
+    gateway, _ = roles(
+        {
+            "answer": "根据证据 [K1]，详见 knowledge/source/process.md:42。",
+            "citations": [{"citation_id": "K1", "claim": "审批材料要求"}],
+            "limitations": [],
+            "requires_human_confirmation": False,
+        }
+    )
+
+    with pytest.raises(StructuredModelRunError) as exc_info:
+        await gateway.compose(
+            "需要什么材料？",
+            [{"citation_id": "K1", "content": "材料规则"}],
+            allowed_citation_ids={"K1"},
+        )
+
+    assert exc_info.value.code == "MODEL_PUBLIC_ANSWER_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_compose_normalizes_business_sections_and_inline_lists() -> None:
+    gateway, _ = roles(
+        {
+            "answer": (
+                "结论 当前采购单待采购。 ### 当前情况 - 已通过两轮审批。 "
+                "### 下一步操作 1. 由采购员创建采购执行。 ### 注意事项 - 核对合同。"
+            ),
+            "citations": [],
+            "limitations": [],
+            "requires_human_confirmation": False,
+        }
+    )
+
+    output = await gateway.compose("这张采购单现在怎么样？", [], allowed_citation_ids=set())
+
+    assert output.answer == (
+        "### 结论\n\n当前采购单待采购。\n\n"
+        "### 当前情况\n\n- 已通过两轮审批。\n\n"
+        "### 下一步操作\n\n1. 由采购员创建采购执行。\n\n"
+        "### 注意事项\n\n- 核对合同。"
+    )
+
+
 def test_review_schema_covers_evidence_authority_visibility_and_hitl() -> None:
     output = ReviewOutput.model_validate(
         {

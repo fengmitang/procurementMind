@@ -229,11 +229,29 @@ class MessageData(BaseModel):
     external_message_id: str | None
     sender_type: str
     content: str
+    message_data: dict[str, JsonValue] | None = None
     created_at: datetime
 
 
 class MessageListData(BaseModel):
     items: list[MessageData]
+    page: int
+    page_size: int
+    total: int
+
+
+class ConversationData(BaseModel):
+    conversation_id: int
+    external_conversation_id: str | None
+    status: str
+    title: str
+    message_count: int
+    started_at: datetime
+    last_active_at: datetime
+
+
+class ConversationListData(BaseModel):
+    items: list[ConversationData]
     page: int
     page_size: int
     total: int
@@ -273,6 +291,15 @@ class ConversationCompletedData(BaseModel):
 
 class RequirementMutationData(BaseModel):
     requirement_id: int
+    requirement_no: str | None = None
     status: str
     version: int
     current_handler: dict[str, JsonValue] | None = None
+
+
+class FieldsSaveData(BaseModel):
+    requirement_id: int
+    status: str
+    version: int
+    missing_fields: list[str]
+    fields_complete: bool

@@ -1,5 +1,6 @@
 import json
 import re
+from calendar import monthrange
 from datetime import date
 from typing import Protocol
 
@@ -130,6 +131,28 @@ class DeterministicAnalysisPlanner:
 
     def _parse_query(self, message: str) -> AnalyticsQueryInput:
         values: dict = {}
+        if re.search(r"我.{0,12}(?:发起|创建)", message) or "我的采购" in message:
+            values["created_by_me"] = True
+        chinese_months = {
+            "一月": 1,
+            "二月": 2,
+            "三月": 3,
+            "四月": 4,
+            "五月": 5,
+            "六月": 6,
+            "七月": 7,
+            "八月": 8,
+            "九月": 9,
+            "十月": 10,
+            "十一月": 11,
+            "十二月": 12,
+        }
+        month = next((value for label, value in chinese_months.items() if label in message), None)
+        if month is not None:
+            year_match = re.search(r"(20\d{2})年", message)
+            year = int(year_match.group(1)) if year_match else date.today().year
+            values["created_from"] = date(year, month, 1)
+            values["created_to"] = date(year, month, monthrange(year, month)[1])
         dates = re.findall(r"\b(20\d{2}-\d{2}-\d{2})\b", message)
         if dates:
             values["created_from"] = date.fromisoformat(dates[0])

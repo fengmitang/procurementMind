@@ -28,7 +28,7 @@ from app.schemas.procurement import (
     WarehouseFields,
 )
 from app.services.permissions import require_any_role, require_building_membership
-from app.services.privacy import mask_bank_account
+from app.services.privacy import mask_bank_account, mask_mobile
 from app.services.workflow import WorkflowService
 
 APPLICANT_REQUIRED_FIELDS = (
@@ -465,6 +465,8 @@ class ProcurementService:
         execution_data = None
         if execution is not None:
             execution_data = {
+                "purchaser_name": execution.purchaser_name_snapshot,
+                "purchaser_mobile_masked": mask_mobile(execution.purchaser_mobile_snapshot),
                 "supplier_id": execution.supplier_id,
                 "supplier_name": execution.supplier_name_snapshot,
                 "supplier_tax_number": execution.supplier_tax_no_snapshot,
@@ -492,8 +494,22 @@ class ProcurementService:
                 "building_name": building.building_name if building else None,
             },
             current_handler=(
-                {"employee_id": handler.employee_id, "name": handler.name} if handler else None
+                {
+                    "employee_id": handler.employee_id,
+                    "name": handler.name,
+                    "mobile_masked": mask_mobile(handler.mobile),
+                }
+                if handler
+                else None
             ),
+            initiator={
+                "name": request.applicant_name_snapshot,
+                "mobile_masked": mask_mobile(request.applicant_mobile_snapshot),
+                "building_name": building.building_name if building else None,
+                "created_at": request.created_at,
+                "operator_name": request.applicant_name_snapshot,
+                "is_delegated": False,
+            },
             applicant_fields={
                 "device_profession": request.device_profession,
                 "device_name": request.device_name,
@@ -508,6 +524,8 @@ class ProcurementService:
             purchase_execution=execution_data,
             warehouse_receipt=(
                 {
+                    "warehouse_name": receipt.warehouse_name_snapshot,
+                    "warehouse_mobile_masked": mask_mobile(receipt.warehouse_mobile_snapshot),
                     "warehouse_location": receipt.warehouse_location,
                     "received_quantity": receipt.received_quantity,
                     "receipt_remark": receipt.receipt_remark,
@@ -687,6 +705,8 @@ class ProcurementService:
     def _review_dict(review: PurchaseReview) -> dict:
         return {
             "review_round": review.review_round,
+            "reviewer_name": review.reviewer_name_snapshot,
+            "reviewer_mobile_masked": mask_mobile(review.reviewer_mobile_snapshot),
             "review_status": review.review_status,
             "review_result": review.review_result,
             "review_opinion": review.review_opinion,

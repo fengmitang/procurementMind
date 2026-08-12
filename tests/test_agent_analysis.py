@@ -34,6 +34,17 @@ EVALUATION_CASES = json.loads(
 )
 
 
+@pytest.mark.asyncio
+async def test_planner_parses_my_july_requirements_as_scoped_business_query() -> None:
+    plan = await DeterministicAnalysisPlanner().create_plan("我七月发起的采购申请有哪些")
+    query = plan.query_context
+
+    assert query is not None
+    assert query.created_by_me is True
+    assert query.created_from == date(date.today().year, 7, 1)
+    assert query.created_to == date(date.today().year, 7, 31)
+
+
 class FakeAnalysisClient:
     def __init__(self, responses: dict[str, list[MCPToolResponse]] | None = None) -> None:
         self.responses = responses or {}

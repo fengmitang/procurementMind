@@ -121,6 +121,23 @@ class HITLService:
     @staticmethod
     def _validate_draft(pending: PendingAction) -> None:
         draft = pending.draft
+        if pending.action_type is HITLActionType.CREATE_PURCHASE_DRAFT:
+            required = {
+                "building_id",
+                "device_profession",
+                "device_name",
+                "quantity",
+                "unit",
+                "application_reason",
+            }
+            missing = sorted(key for key in required if draft.get(key) in (None, ""))
+            if missing:
+                raise AgentError(
+                    "HITL_DRAFT_INCOMPLETE",
+                    "采购申请草稿信息尚未补充完整",
+                    409,
+                )
+            return
         try:
             requirement_id = int(draft["requirement_id"])
             expected_version = int(draft["expected_version"])

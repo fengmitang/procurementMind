@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -7,7 +8,6 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from agent_app.analysis.schemas import AnalysisPlan
-from agent_app.models.json_stream import JsonStringFieldDeltaExtractor
 from agent_app.models.protocols import (
     ModelMessage,
     ModelPurpose,
@@ -92,7 +92,8 @@ class StructuredModelRoles:
                 "归因或需要多步骤工具组合的分析必须使用 COMPLEX_QUERY。用户声称某张采购单当前"
                 "处于某状态，不得把该说法当成权威事实；只要问题涉及‘这张/当前采购单’的实际状态，"
                 "就必须使用实时工具。若同时询问该状态下接下来怎么处理、适用什么流程或规则，必须"
-                "路由到 HYBRID，同时使用实时工具和知识库。"
+                "路由到 HYBRID，同时使用实时工具和知识库。数据库主键属于内部字段，绝不能要求"
+                "用户提供；用户只需提供采购单号或自然语言描述。明确采购意图应路由 FORM_PREFILL。"
             ),
             {"message": message},
         )
@@ -128,9 +129,9 @@ class StructuredModelRoles:
                 '正确格式示例："tool":"query_purchase_analytics","arguments":{"query":'
                 '{"group_by":"BUILDING","aggregations":["COUNT","TOTAL_AMOUNT"],'
                 '"page":1,"page_size":20}}。'
-                "get_supplier_performance、get_similar_cases、"
-                "get_requirement_risk_signals 只有在问题明确提供对应正整数 ID 时才能使用，"
-                "禁止编造 ID。query_context 应与分析查询条件一致。"
+                "get_supplier_performance、get_similar_cases、get_requirement_risk_signals 仅在系统"
+                "已经由页面上下文或业务单号解析出内部定位键时使用；不得要求用户提供数据库主键，"
+                "也不得编造定位键。query_context 应与分析查询条件一致。"
             ),
             {"message": message, "confirmed_context": confirmed_context},
         )
@@ -148,10 +149,15 @@ class StructuredModelRoles:
             ComposeOutput,
             (
                 "你是采购协同 Compose。只能依据给出的可见证据回答；不得把建议写成事实，不得生成"
-                "未提供的引用。citations 只能使用 allowed_citation_ids 中的知识库引用；如果该列表"
+                "未提供的引用。citations 仅供界面独立展示来源，answer 正文禁止出现 K1、K2 等"
+                "引用编号，也禁止出现 Prompt、Chunk、RAG、Tool、Router、Graph、evidence、"
+                "文件路径、行号、内部字段名或‘当前用户可见的知识库证据’等实现措辞。"
+                "citations 只能使用 allowed_citation_ids 中的知识库引用；如果该列表"
                 "为空，citations 必须为空。Tool 实时事实直接陈述来源，不得伪造 K 编号。正式业务"
                 "动作只能说明需要人工确认。不得向用户展示 snake_case 字段名、数据库主键或"
                 "英文状态枚举；例如应将 PENDING_PURCHASE 表述为待采购、APPROVED 表述为已通过。"
+                "使用普通业务中文，优先按结论、当前情况、下一步操作、注意事项组织；关键动作"
+                "加粗，多步骤用编号，避免长段落和机械日志语气。"
             ),
             {
                 "question": question,
@@ -172,6 +178,8 @@ class StructuredModelRoles:
                 fallback_used=response.fallback_used,
                 fallback_reason=response.fallback_reason,
             )
+        output.answer = self._normalize_public_answer(output.answer)
+        self._validate_public_answer(output.answer, attempts, response)
         return output
 
     async def compose_stream(
@@ -182,30 +190,26 @@ class StructuredModelRoles:
         allowed_citation_ids: set[str],
         answer_delta_handler: Callable[[str], Awaitable[None]],
     ) -> ComposeOutput:
-        extractor = JsonStringFieldDeltaExtractor("answer")
-
-        async def handle_raw_delta(value: str) -> None:
-            answer_delta = extractor.feed(value)
-            if answer_delta:
-                await answer_delta_handler(answer_delta)
-
         output, response, attempts = await self._run(
             ModelPurpose.COMPOSE,
             ComposeOutput,
             (
                 "你是采购协同 Compose。只能依据给出的可见证据回答；不得把建议写成事实，不得生成"
-                "未提供的引用。citations 只能使用 allowed_citation_ids 中的知识库引用；如果该列表"
+                "未提供的引用。citations 仅供界面独立展示来源，answer 正文禁止出现 K1、K2 等"
+                "引用编号，也禁止出现 Prompt、Chunk、RAG、Tool、Router、Graph、evidence、"
+                "文件路径、行号、内部字段名或‘当前用户可见的知识库证据’等实现措辞。"
+                "citations 只能使用 allowed_citation_ids 中的知识库引用；如果该列表"
                 "为空，citations 必须为空。Tool 实时事实直接陈述来源，不得伪造 K 编号。正式业务"
                 "动作只能说明需要人工确认。answer 字段必须是完整、面向业务用户的中文回答。"
                 "不得向用户展示 snake_case 字段名、数据库主键或英文状态枚举；例如应将 "
-                "PENDING_PURCHASE 表述为待采购、APPROVED 表述为已通过。"
+                "PENDING_PURCHASE 表述为待采购、APPROVED 表述为已通过。使用结论、当前情况、"
+                "下一步操作、注意事项的清晰结构；关键动作加粗，多步骤用编号，避免机械日志语气。"
             ),
             {
                 "question": question,
                 "visible_evidence": evidence,
                 "allowed_citation_ids": sorted(allowed_citation_ids),
             },
-            delta_handler=handle_raw_delta,
         )
         referenced = {item.citation_id for item in output.citations}
         invalid = referenced - allowed_citation_ids
@@ -220,7 +224,48 @@ class StructuredModelRoles:
                 fallback_used=response.fallback_used,
                 fallback_reason=response.fallback_reason,
             )
+        output.answer = self._normalize_public_answer(output.answer)
+        self._validate_public_answer(output.answer, attempts, response)
+        await answer_delta_handler(output.answer)
         return output
+
+    @staticmethod
+    def _normalize_public_answer(answer: str) -> str:
+        """Keep model-generated business sections readable in Markdown clients."""
+        section_pattern = re.compile(
+            r"(^|\s+)(?:#{2,4}\s*)?(结论|当前情况|下一步操作|注意事项)\s*",
+            re.MULTILINE,
+        )
+        normalized = section_pattern.sub(
+            lambda match: f"\n\n### {match.group(2)}\n\n",
+            answer,
+        )
+        normalized = re.sub(r"[ \t]+(?=-\s+)", "\n", normalized)
+        normalized = re.sub(r"[ \t]+(?=\d+\.\s+)", "\n", normalized)
+        return normalized.strip()
+
+    @staticmethod
+    def _validate_public_answer(
+        answer: str,
+        attempts: int,
+        response: StructuredModelResponse,
+    ) -> None:
+        internal_pattern = re.compile(
+            r"\[K\d+\]|(?:knowledge|agent_app|app)[/\\][\w./\\-]+\.md(?::\d+)?|"
+            r"\b(?:Prompt|Chunk|RAG|Router|Graph|evidence)\b|当前用户可见的知识库证据",
+            re.IGNORECASE,
+        )
+        if internal_pattern.search(answer):
+            raise StructuredModelRunError(
+                "MODEL_PUBLIC_ANSWER_INVALID",
+                "模型回答包含不应向业务用户展示的内部实现信息",
+                attempts=attempts,
+                retryable=False,
+                primary_model=response.primary_model,
+                actual_model=response.actual_model,
+                fallback_used=response.fallback_used,
+                fallback_reason=response.fallback_reason,
+            )
 
     async def review(
         self,
@@ -264,14 +309,10 @@ class StructuredModelRoles:
             ],
             response_schema=output_type.model_json_schema(mode="serialization"),
             max_output_tokens=(
-                _ROLE_MAX_OUTPUT_TOKENS[purpose]
-                if self.performance_optimizations_enabled
-                else 2000
+                _ROLE_MAX_OUTPUT_TOKENS[purpose] if self.performance_optimizations_enabled else 2000
             ),
             enable_thinking=(
-                _ROLE_THINKING[purpose]
-                if self.performance_optimizations_enabled
-                else None
+                _ROLE_THINKING[purpose] if self.performance_optimizations_enabled else None
             ),
         )
         output, response, attempts = await self.runner.run(

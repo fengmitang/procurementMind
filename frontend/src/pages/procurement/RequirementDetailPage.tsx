@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Alert, App, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal,
+  Alert, App, Button, Card, DatePicker, Descriptions, Divider, Form, Input, InputNumber, Modal,
   Radio, Select, Space, Spin, Steps, Timeline, Typography,
 } from 'antd'
 import { ArrowLeftOutlined, CheckOutlined, EditOutlined, SendOutlined, StopOutlined, ThunderboltOutlined } from '@ant-design/icons'
@@ -10,13 +10,14 @@ import { PageShell } from '../../components/PageShell'
 import { StatusTag, statusLabel } from '../../components/StatusTag'
 import { SupplierSelect } from '../../components/SupplierSelect'
 import { ContextAssistantDrawer } from '../../components/ContextAssistantDrawer'
-import { actionLabel, enumLabel, fieldLabel } from '../../constants/business'
+import { actionLabel, enumLabel } from '../../constants/business'
 import { useIdentity } from '../../features/identity/IdentityProvider'
 import type { AgentFormSuggestion, RequirementDetail, TimelineItem } from '../../types/api'
+import './RequirementDetailPage.css'
 
 const actionToken = () => `WEB-${crypto.randomUUID()}`
 const steps = ['DRAFT', 'PENDING_REVIEW', 'PENDING_PURCHASE', 'PURCHASING', 'PENDING_WAREHOUSE', 'COMPLETED']
-const dateFields = new Set(['reviewed_at', 'purchased_at', 'received_at', 'expected_arrival_date'])
+const dateFields = new Set(['created_at', 'reviewed_at', 'purchased_at', 'received_at', 'expected_arrival_date'])
 const moneyFields = new Set(['estimated_unit_price', 'estimated_total_price', 'actual_unit_price', 'actual_total_price'])
 
 function displayValue(key: string, value: unknown) {
@@ -27,12 +28,42 @@ function displayValue(key: string, value: unknown) {
   return String(enumLabel(value))
 }
 
-function RecordDescriptions({ data }: { data: Record<string, unknown> | null }) {
-  if (!data) return <Typography.Text type="secondary">暂无记录</Typography.Text>
-  const items = Object.entries(data)
-    .filter(([key]) => !key.endsWith('_id') && !['supplier_link'].includes(key))
-    .map(([key, value]) => ({ key, label: fieldLabel(key), children: displayValue(key, value) }))
-  return <Descriptions column={{ xs: 1, md: 2, xl: 3 }} items={items} />
+type DetailItem = { key: string; label: string; value: unknown; span?: number }
+
+function InfoDescriptions({ items }: { items: DetailItem[] }) {
+  return <Descriptions column={{ xs: 1, md: 2, xl: 3 }} items={items.map((item) => ({
+    key: item.key,
+    label: item.label,
+    children: displayValue(item.key, item.value),
+  }))} />
+}
+
+function ReviewRoundCard({ record }: { record: Record<string, any> }) {
+  return <Card size="small" className="record-round-card" title={`第 ${record.review_round} 次审批`} extra={<StatusTag status={record.review_result || record.review_status} />}>
+    <Typography.Title level={5}>审批记录</Typography.Title>
+    <InfoDescriptions items={[
+      { key: 'reviewer_name', label: '审批人', value: record.reviewer_name },
+      { key: 'reviewer_mobile_masked', label: '联系方式', value: record.reviewer_mobile_masked },
+      { key: 'reviewed_at', label: '审批时间', value: record.reviewed_at },
+      { key: 'review_status', label: '审批状态', value: enumLabel(record.review_status) },
+      { key: 'review_result', label: '审批结果', value: enumLabel(record.review_result) },
+      { key: 'review_opinion', label: '审批意见', value: record.review_opinion || record.review_remark, span: 3 },
+    ]} />
+    <Divider />
+    <Typography.Title level={5}>审批方案</Typography.Title>
+    <InfoDescriptions items={[
+      { key: 'proposed_supplier_name', label: '建议供应商', value: record.proposed_supplier_name },
+      { key: 'supplier_contact_name', label: '供应商联系人', value: record.supplier_contact_name },
+      { key: 'supplier_contact_info', label: '供应商联系方式', value: record.supplier_contact_info },
+      { key: 'estimated_unit_price', label: '参考单价', value: record.estimated_unit_price },
+      { key: 'estimated_total_price', label: '预计总价', value: record.estimated_total_price },
+      { key: 'need_contract', label: '是否需要合同', value: record.need_contract == null ? null : record.need_contract ? '是' : '否' },
+      { key: 'contract_type', label: '合同类型', value: record.contract_type },
+      { key: 'payment_method', label: '付款方式', value: record.payment_method },
+      { key: 'expected_arrival_date', label: '预计到货时间', value: record.expected_arrival_date },
+      { key: 'warranty_info', label: '质保', value: record.warranty_info, span: 3 },
+    ]} />
+  </Card>
 }
 
 type ModalType = 'reject' | 'review' | 'purchase' | 'warehouse'
@@ -197,7 +228,7 @@ export function RequirementDetailPage() {
     <Button icon={<ThunderboltOutlined />} onClick={() => setAssistantOpen(true)}>智能辅助</Button>
     <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>返回</Button>
   </Space>}>
-    <Card className="detail-hero"><div><Typography.Text type="secondary">当前状态</Typography.Text><div className="detail-status"><StatusTag status={data.status} /><Typography.Text>{data.current_handler?.name ? `当前处理人：${data.current_handler.name}` : '流程暂无处理人'}</Typography.Text></div></div><Space wrap>
+    <Card className="detail-hero"><div><Typography.Text type="secondary">当前唯一状态</Typography.Text><div className="detail-status"><StatusTag status={data.status} /><Typography.Text>{data.current_handler?.name ? `当前处理人：${data.current_handler.name}${data.current_handler.mobile_masked ? `（${data.current_handler.mobile_masked}）` : ''}` : '流程暂无处理人'}</Typography.Text></div></div><Space wrap>
       {data.allowed_actions.includes('SAVE_APPLICANT_FIELDS') && <Button icon={<EditOutlined />} onClick={() => navigate(`/requirements/${requirementId}/edit`)}>修改申请</Button>}
       {data.allowed_actions.includes('START_PURCHASE') && <Button type="primary" loading={busy} onClick={() => runAction('start-purchase')}>开始采购</Button>}
       {data.allowed_actions.includes('SAVE_REVIEW_FIELDS') && <Button onClick={() => openModal('review')}>填写审批方案</Button>}
@@ -208,14 +239,62 @@ export function RequirementDetailPage() {
       {data.allowed_actions.includes('SAVE_WAREHOUSE_FIELDS') && <Button onClick={() => openModal('warehouse')}>登记入库</Button>}
       {data.allowed_actions.includes('COMPLETE') && <Button type="primary" icon={<CheckOutlined />} loading={busy} onClick={() => runAction('complete')}>确认完成</Button>}
     </Space></Card>
-    <Card title="流程进度" className="detail-card"><Steps current={current} status={data.status === 'REJECTED' ? 'error' : 'process'} items={steps.map((status) => ({ title: statusLabel(status) }))} />{data.status === 'REJECTED' && <Alert type="error" showIcon title="申请已驳回，可修改后重新提交" style={{ marginTop: 20 }} />}</Card>
-    <Card title="基础信息与设备信息" className="detail-card"><Descriptions column={{ xs: 1, md: 2, xl: 3 }} items={[
-      { key: 'building', label: '所属楼宇', children: data.building.building_name || '—' }, { key: 'profession', label: '设备类型', children: applicant.device_profession || '—' }, { key: 'name', label: '设备名称', children: applicant.device_name || '—' }, { key: 'brand', label: '品牌', children: applicant.brand || '—' }, { key: 'model', label: '规格型号', children: applicant.model || '—' }, { key: 'quantity', label: '数量', children: `${applicant.quantity || '—'} ${applicant.unit || ''}` }, { key: 'reason', label: '申请原因', children: applicant.application_reason || '—', span: 3 }, { key: 'remark', label: '补充说明', children: applicant.applicant_remark || '—', span: 3 },
+    <Card title="当前状态与流程" className="detail-card"><Steps current={current} status={data.status === 'REJECTED' ? 'error' : 'process'} items={steps.map((status) => ({ title: statusLabel(status) }))} />{data.status === 'REJECTED' && <Alert type="error" showIcon title="申请已驳回" description="请修改申请信息后重新提交审批。" style={{ marginTop: 20 }} />}</Card>
+    <Card title="发起信息" className="detail-card"><InfoDescriptions items={[
+      { key: 'initiator_name', label: '需求发起人', value: data.initiator.name },
+      { key: 'initiator_mobile', label: '联系方式', value: data.initiator.mobile_masked },
+      { key: 'initiator_building', label: '所属楼宇/部门', value: data.initiator.building_name || data.building.building_name },
+      { key: 'created_at', label: '发起时间', value: data.initiator.created_at },
+      ...(data.initiator.is_delegated ? [{ key: 'operator_name', label: '实际操作人', value: data.initiator.operator_name }] : []),
     ]} /></Card>
-    <Card title="审批信息" className="detail-card">{data.review_records.length ? data.review_records.map((item, index) => <RecordDescriptions key={index} data={item} />) : <Typography.Text type="secondary">暂无审批记录</Typography.Text>}</Card>
-    <Card title="采购信息" className="detail-card"><RecordDescriptions data={data.purchase_execution} /></Card>
-    <Card title="入库信息" className="detail-card"><RecordDescriptions data={data.warehouse_receipt} /></Card>
-    <Card title="操作历史" className="detail-card"><Timeline items={timeline.map((item) => ({ color: item.to_status === 'REJECTED' ? 'red' : 'blue', content: <div><strong>{item.operation_summary && !/^[A-Z_]+$/.test(item.operation_summary) ? item.operation_summary : actionLabel(item.action_type)}</strong><p>{item.operator_name} · {item.operator_role_name} · {dayjs(item.operated_at).format('YYYY-MM-DD HH:mm')}</p>{item.to_status && <StatusTag status={item.to_status} />}</div> }))} /></Card>
+    <Card title="需求与设备信息" className="detail-card"><InfoDescriptions items={[
+      { key: 'building', label: '所属楼宇', value: data.building.building_name },
+      { key: 'profession', label: '设备类型', value: applicant.device_profession },
+      { key: 'name', label: '设备名称', value: applicant.device_name },
+      { key: 'brand', label: '品牌', value: applicant.brand },
+      { key: 'model', label: '规格型号', value: applicant.model },
+      { key: 'quantity', label: '数量', value: applicant.quantity ? `${applicant.quantity} ${applicant.unit || ''}` : null },
+      { key: 'reason', label: '申请原因', value: applicant.application_reason, span: 3 },
+      { key: 'remark', label: '补充说明', value: applicant.applicant_remark, span: 3 },
+    ]} /></Card>
+    <Card title="审批记录" className="detail-card">{data.review_records.length ? <div className="record-round-list">{data.review_records.map((item) => <ReviewRoundCard key={item.review_round} record={item} />)}</div> : <Typography.Text type="secondary">暂无审批记录</Typography.Text>}</Card>
+    <Card title="采购执行" className="detail-card">{data.purchase_execution ? <div className="detail-section-grid">
+      <section><Typography.Title level={5}>采购执行信息</Typography.Title><InfoDescriptions items={[
+        { key: 'purchaser_name', label: '采购员', value: data.purchase_execution.purchaser_name },
+        { key: 'purchaser_mobile', label: '联系方式', value: data.purchase_execution.purchaser_mobile_masked },
+        { key: 'purchased_at', label: '操作时间', value: data.purchase_execution.purchased_at },
+        { key: 'execution_status', label: '当前执行状态', value: statusLabel(data.status) },
+      ]} /></section>
+      <section><Typography.Title level={5}>供应商信息</Typography.Title><InfoDescriptions items={[
+        { key: 'supplier_name', label: '供应商', value: data.purchase_execution.supplier_name },
+        { key: 'contract_contact_info', label: '联系人/联系方式', value: data.purchase_execution.contract_contact_info },
+        { key: 'supplier_tax_number', label: '统一社会信用代码', value: data.purchase_execution.supplier_tax_number },
+        { key: 'registered_address', label: '注册地址', value: data.purchase_execution.registered_address, span: 2 },
+      ]} /></section>
+      <section><Typography.Title level={5}>价格与合同</Typography.Title><InfoDescriptions items={[
+        { key: 'actual_unit_price', label: '实际单价', value: data.purchase_execution.actual_unit_price },
+        { key: 'actual_total_price', label: '实际总价', value: data.purchase_execution.actual_total_price },
+        { key: 'tax_rate', label: '税率', value: data.purchase_execution.tax_rate },
+        { key: 'bank_name', label: '开户行', value: data.purchase_execution.bank_name },
+        { key: 'bank_account', label: '银行账号', value: data.purchase_execution.bank_account },
+        { key: 'purchase_remark', label: '采购备注', value: data.purchase_execution.purchase_remark, span: 3 },
+      ]} /></section>
+    </div> : <Typography.Text type="secondary">暂无采购执行记录</Typography.Text>}</Card>
+    <Card title="入库记录" className="detail-card">{data.warehouse_receipt ? <div className="detail-section-grid">
+      <section><Typography.Title level={5}>入库执行</Typography.Title><InfoDescriptions items={[
+        { key: 'warehouse_name', label: '入库人员', value: data.warehouse_receipt.warehouse_name },
+        { key: 'warehouse_mobile', label: '联系方式', value: data.warehouse_receipt.warehouse_mobile_masked },
+        { key: 'received_at', label: '入库时间', value: data.warehouse_receipt.received_at },
+        { key: 'warehouse_location', label: '入库位置', value: data.warehouse_receipt.warehouse_location },
+      ]} /></section>
+      <section><Typography.Title level={5}>验收结果</Typography.Title><InfoDescriptions items={[
+        { key: 'requested_quantity', label: '申请数量', value: `${applicant.quantity || '—'} ${applicant.unit || ''}` },
+        { key: 'received_quantity', label: '实际数量', value: `${data.warehouse_receipt.received_quantity || '—'} ${applicant.unit || ''}` },
+        { key: 'acceptance_result', label: '验收结果', value: Number(data.warehouse_receipt.received_quantity) >= Number(applicant.quantity) ? '数量符合' : '存在数量差异' },
+        { key: 'receipt_remark', label: '异常或备注', value: data.warehouse_receipt.receipt_remark, span: 3 },
+      ]} /></section>
+    </div> : <Typography.Text type="secondary">暂无入库记录</Typography.Text>}</Card>
+    <Card title="流程历史" className="detail-card"><Typography.Paragraph type="secondary">以下均为历史动作；页面顶部状态为当前唯一状态。</Typography.Paragraph><Timeline items={timeline.map((item) => ({ color: item.to_status === 'REJECTED' ? 'red' : 'blue', content: <div className="timeline-history-item"><strong>{item.operation_summary && !/^[A-Z_]+$/.test(item.operation_summary) ? item.operation_summary : actionLabel(item.action_type)}</strong><p>{item.operator_name} · {item.operator_role_name} · {dayjs(item.operated_at).format('YYYY-MM-DD HH:mm')}</p><Typography.Text>{item.from_status ? `${statusLabel(item.from_status)} → ` : ''}{item.to_status ? statusLabel(item.to_status) : '状态未变化'}{item.assigned_to_name ? ` · 交由 ${item.assigned_to_name} 处理` : ''}</Typography.Text></div> }))} /></Card>
     <Modal open={Boolean(modal)} width={680} title={{ reject: '驳回采购申请', review: '填写审批方案', purchase: '登记采购结果', warehouse: '登记入库' }[modal || 'review']} onCancel={() => setModal(null)} onOk={submitModal} confirmLoading={busy} destroyOnHidden><Form form={form} layout="vertical">
       {modal === 'reject' && <Form.Item name="reason" label="驳回原因" rules={[{ required: true, message: '请填写驳回原因' }]}><Input.TextArea rows={4} /></Form.Item>}
       {modal === 'review' && <>

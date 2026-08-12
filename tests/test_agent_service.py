@@ -251,12 +251,11 @@ async def test_chat_uses_backend_identity_and_persists_fixed_messages() -> None:
         ("USER", "查询采购申请状态"),
         (
             "AGENT",
-            "暂时无法确认采购申请的实时状态：请提供采购申请 ID，例如："
-            "查询采购申请 91007 的当前状态。",
+            "暂时无法确认采购申请的实时状态：请提供采购单号，或用设备、时间和状态描述这张申请。",
         ),
     ]
     assert backend.saved_states[0].current_action == "CHAT"
-    assert backend.saved_states[0].pending_field == "purchase_request_id"
+    assert backend.saved_states[0].pending_field == "requirement_reference"
     assert backend.saved_states[0].collected_data["last_route"] == "REALTIME_BUSINESS"
     assert backend.saved_states[0].collected_data["last_trace_events"]
     assert backend.snapshot_reasons == ["GRAPH_RUN_COMPLETED"]

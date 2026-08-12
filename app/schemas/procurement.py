@@ -164,6 +164,7 @@ class RequirementDetailData(BaseModel):
     version: int
     building: dict[str, Any]
     current_handler: dict[str, Any] | None
+    initiator: dict[str, Any]
     applicant_fields: dict[str, Any]
     review_records: list[dict[str, Any]]
     purchase_execution: dict[str, Any] | None

@@ -326,4 +326,5 @@ async def test_risk_graph_requires_requirement_id_without_tool_call() -> None:
 
     assert result.errors[0].code == "PURCHASE_REQUEST_ID_REQUIRED"
     assert client.calls == []
-    assert "采购申请 ID" in result.reply
+    assert "采购单号" in result.reply
+    assert "ID" not in result.reply

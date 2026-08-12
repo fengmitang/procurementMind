@@ -1,6 +1,6 @@
 import { requestJson } from './http'
 import type {
-  AdminEmployee, AdminOverview, AdminReferences, ApplicantFields, CurrentUser, PagedData, PurchaseRecord, RequirementDetail,
+  AdminEmployee, AdminOverview, AdminReferences, AgentConversationSummary, AgentStoredMessage, ApplicantFields, CurrentUser, PagedData, PurchaseRecord, RequirementDetail,
   RequirementListData, RequirementMutation, RequirementView, SupplierDetail, SupplierRisk, SupplierSummary, TimelineItem,
 } from '../types/api'
 
@@ -25,6 +25,8 @@ export class BackendClient {
     this.proxy<RequirementListData>('GET', '/api/v1/requirements', { view, page: 1, page_size: 20, ...params })
   requirement = (id: number) => this.proxy<RequirementDetail>('GET', `/api/v1/requirements/${id}`)
   timeline = (id: number) => this.proxy<{ items: TimelineItem[] }>('GET', `/api/v1/requirements/${id}/timeline`)
+  agentConversations = () => this.proxy<PagedData<AgentConversationSummary>>('GET', '/api/v1/agent/conversations', { page: 1, page_size: 50 })
+  agentMessages = (conversationId: number) => this.proxy<PagedData<AgentStoredMessage>>('GET', `/api/v1/agent/conversations/${conversationId}/messages`, { page: 1, page_size: 200 })
   createRequirement = (buildingId: number) =>
     this.proxy<RequirementMutation>('POST', '/api/v1/requirements', {}, { building_id: buildingId })
   saveApplicantFields = (id: number, version: number, fields: ApplicantFields) =>

@@ -145,7 +145,8 @@ async def test_knowledge_route_retrieves_visible_citations_and_reviews_evidence(
     assert result.evidence_sufficient is True
     assert result.review is not None and result.review.passed is True
     assert "重新提交" in result.reply
-    assert "[K1]" in result.reply
+    assert "[K1]" not in result.reply
+    assert "knowledge/source" not in result.reply
     assert retriever.calls[0][1].allowed_roles == ["APPLICANT"]
     assert retriever.calls[0][2] == "trace-graph"
     assert [event.name for event in result.trace_events] == [
@@ -177,7 +178,7 @@ async def test_hybrid_route_combines_rag_rules_and_tool_realtime_fact() -> None:
     assert result.route is RouteType.HYBRID
     assert "COMPLETED" in result.reply
     assert "重新提交" in result.reply
-    assert "[K1]" in result.reply
+    assert "[K1]" not in result.reply
     assert result.evidence_sufficient is True
     assert result.tool_call_count == 1
     assert len(result.evidence) == 2
@@ -190,15 +191,38 @@ async def test_form_prefill_creates_draft_and_never_executes_business_action() -
     saved = GraphMemoryMapper.to_backend_state(graph_request, result)
 
     assert result.route is RouteType.FORM_PREFILL
-    assert result.pending_action is not None
-    assert result.pending_action.action_type == "SUBMIT_PURCHASE_REQUEST"
-    assert result.pending_action.requires_confirmation is True
+    assert result.pending_action is None
+    assert result.form_draft == {
+        "device_name": "服务器",
+        "device_profession": "算力服务器",
+    }
+    assert result.form_missing_fields == [
+        "building_id",
+        "quantity",
+        "unit",
+        "application_reason",
+    ]
     assert result.tool_call_count == 0
-    assert result.review is not None and result.review.passed is False
-    assert result.review.requires_human_confirmation is True
-    assert saved.awaiting_confirmation is True
-    assert saved.collected_data["pending_action"]["draft"]["status"] == "DRAFT"
-    assert "尚未提交" in result.reply
+    assert result.review is not None and result.review.passed is True
+    assert result.review.requires_human_confirmation is False
+    assert saved.awaiting_confirmation is False
+    assert saved.collected_data["form_draft"]["device_name"] == "服务器"
+    assert "还需要补充" in result.reply
+
+
+@pytest.mark.asyncio
+async def test_natural_purchase_intent_keeps_known_fields_and_asks_only_for_missing() -> None:
+    result = await ProcurementGraphService(settings()).run(
+        applicant_request("我要采购一批服务器，浪潮的")
+    )
+
+    assert result.route is RouteType.FORM_PREFILL
+    assert result.form_draft["device_name"] == "服务器"
+    assert result.form_draft["device_profession"] == "算力服务器"
+    assert result.form_draft["brand"] == "浪潮"
+    assert "device_name" not in result.form_missing_fields
+    assert "brand" not in result.form_missing_fields
+    assert result.pending_action is None
 
 
 @pytest.mark.asyncio
@@ -216,7 +240,7 @@ async def test_configured_model_roles_are_used_for_route_and_compose() -> None:
             ),
             model_response(
                 {
-                    "answer": "模型基于可见证据生成的回答 [K1]",
+                    "answer": "申请被驳回后，请先修改申请内容，再重新提交审批。",
                     "citations": [{"citation_id": "K1", "claim": "驳回处理流程"}],
                     "limitations": [],
                     "requires_human_confirmation": False,
@@ -242,7 +266,7 @@ async def test_configured_model_roles_are_used_for_route_and_compose() -> None:
         model_roles=model_roles,
     ).run(applicant_request("请帮我处理这个问题"))
 
-    assert result.reply == "模型基于可见证据生成的回答 [K1]"
+    assert result.reply == "申请被驳回后，请先修改申请内容，再重新提交审批。"
     assert adapter.requests[0].max_output_tokens == 256
     assert adapter.requests[0].enable_thinking is False
     assert adapter.requests[1].max_output_tokens == 1200

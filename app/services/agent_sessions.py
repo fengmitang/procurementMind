@@ -15,6 +15,8 @@ from app.schemas.agent_sessions import (
     ActiveConversationRequest,
     CompleteConversationRequest,
     ConversationCompletedData,
+    ConversationData,
+    ConversationListData,
     ConversationStateData,
     ConversationStatePayload,
     CreateMessageRequest,
@@ -45,11 +47,19 @@ class AgentSessionService:
         payload: ActiveConversationRequest,
     ) -> ActiveConversationData:
         await self.repository.lock_employee(session, current_user.employee_id)
-        conversation = await self.repository.get_active_by_action(
-            session,
-            current_user.employee_id,
-            payload.current_action,
-        )
+        conversation = None
+        if payload.external_conversation_id:
+            conversation = await self.repository.get_active_by_external_id(
+                session,
+                current_user.employee_id,
+                payload.external_conversation_id,
+            )
+        else:
+            conversation = await self.repository.get_active_by_action(
+                session,
+                current_user.employee_id,
+                payload.current_action,
+            )
         if conversation is None:
             now = datetime.now().replace(microsecond=0)
             conversation = AgentConversation(
@@ -128,6 +138,7 @@ class AgentSessionService:
             external_message_id=payload.external_message_id,
             sender_type=payload.sender_type,
             content=payload.content,
+            message_data=payload.message_data,
             created_at=now,
         )
         session.add(message)
@@ -164,6 +175,7 @@ class AgentSessionService:
                     external_message_id=message.external_message_id,
                     sender_type=message.sender_type,
                     content=message.content,
+                    message_data=message.message_data,
                     created_at=message.created_at,
                 )
                 for message in messages
@@ -172,6 +184,37 @@ class AgentSessionService:
             page_size=page_size,
             total=total,
         )
+
+    async def list_conversations(
+        self,
+        session: AsyncSession,
+        current_user: CurrentUser,
+        page: int,
+        page_size: int,
+    ) -> ConversationListData:
+        rows, total = await self.repository.list_conversations(
+            session, current_user.employee_id, page, page_size
+        )
+        items: list[ConversationData] = []
+        for conversation in rows:
+            first_message = await self.repository.first_user_message(
+                session, conversation.conversation_id
+            )
+            title = first_message.content.strip()[:30] if first_message else "新会话"
+            items.append(
+                ConversationData(
+                    conversation_id=conversation.conversation_id,
+                    external_conversation_id=conversation.external_conversation_id,
+                    status=conversation.status,
+                    title=title or "新会话",
+                    message_count=await self.repository.message_count(
+                        session, conversation.conversation_id
+                    ),
+                    started_at=conversation.started_at,
+                    last_active_at=conversation.last_active_at,
+                )
+            )
+        return ConversationListData(items=items, page=page, page_size=page_size, total=total)
 
     async def get_state(
         self,

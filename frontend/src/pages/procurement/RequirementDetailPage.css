@@ -1,0 +1,6 @@
+.record-round-list { display: flex; flex-direction: column; gap: 16px; }
+.record-round-card { border-color: #d9e8f7 !important; background: #fbfdff; }
+.record-round-card h5, .detail-section-grid h5 { margin: 2px 0 14px !important; color: #294b69; }
+.detail-section-grid { display: flex; flex-direction: column; }
+.detail-section-grid > section + section { border-top: 1px solid #edf2f7; margin-top: 18px; padding-top: 18px; }
+.timeline-history-item .ant-typography { font-size: 13px; color: #49657d; }

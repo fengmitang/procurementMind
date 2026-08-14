@@ -144,10 +144,10 @@ Agent 可生成 `pending_action`，但不会在 Graph 中直接执行采购写�
 当前评测与验证入口：
 
 ```powershell
-F:\Anaconda\envs\purchasing-agent\python.exe scripts\run_deterministic_evaluations.py
-F:\Anaconda\envs\purchasing-agent\python.exe scripts\run_rag_evaluations.py
-F:\Anaconda\envs\purchasing-agent\python.exe scripts\run_agent_acceptance_evaluation.py
-F:\Anaconda\envs\purchasing-agent\python.exe scripts\benchmark_agent_latency.py
+python scripts\run_deterministic_evaluations.py
+python scripts\run_rag_evaluations.py
+python scripts\run_agent_acceptance_evaluation.py
+python scripts\benchmark_agent_latency.py
 ```
 
 - Deterministic evaluation：Router、Tool Security、Analysis 和 Risk 固定契约。
@@ -188,16 +188,12 @@ RAG Key/Base URL 为空时会复用模型配置。模板中的空值只表示密
 
 ## 启动方式
 
-本机项目固定使用：
-
-```text
-F:\Anaconda\envs\purchasing-agent\python.exe
-```
+请先激活满足 Python `>=3.12,<3.13` 的项目虚拟环境；本项目维护者使用的具体 Conda 路径见本地开发指南。
 
 推荐开发启动：
 
 ```powershell
-cd F:\Studio\ProcumentMind\frontend
+cd frontend
 npm.cmd install
 cd ..
 .\scripts\start_dev.ps1
@@ -220,9 +216,9 @@ docker compose --env-file .env.docker up -d --build
 ## 测试
 
 ```powershell
-F:\Anaconda\envs\purchasing-agent\python.exe -m pytest
-F:\Anaconda\envs\purchasing-agent\python.exe -m ruff check .
-F:\Anaconda\envs\purchasing-agent\python.exe -m ruff format --check .
+python -m pytest
+python -m ruff check .
+python -m ruff format --check .
 
 cd frontend
 npm.cmd run typecheck

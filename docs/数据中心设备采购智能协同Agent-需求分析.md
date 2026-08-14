@@ -1,7 +1,9 @@
 # 数据中心设备采购智能协同 Agent 需求分析
 
-> 版本：V2.1  
-> 更新日期：2026-08-04
+> 版本：V2.2
+> 更新日期：2026-08-14
+
+> 实现口径：四个 Agent 名称表示同一 Agent Service 内的 Router、Knowledge、Analysis、Review 逻辑角色，不是四个独立部署服务。独立动态 Skills 系统不再作为第一版必须目标；当前规则由结构化 Role Prompt、Tool Contract、Graph 节点、知识文档和 Backend 确定性规则承载。
 
 ## 一、项目背景
 
@@ -674,9 +676,9 @@ Review Agent 需要同时读取：
 
 ---
 
-# 十五、Skills
+# 十五、领域能力封装（独立 Skills 为后续扩展）
 
-Skills 用于保存可独立修改和加载的领域规则。
+以下 Skill 名称保留为领域规则分组，不表示当前存在独立 Skill Loader 或动态版本系统。
 
 ## Knowledge Skill
 
@@ -710,7 +712,7 @@ Skills 用于保存可独立修改和加载的领域规则。
 - 证据不足时打回，不直接放行。
 - 重要结论必须能够追溯到工具结果或文档片段。
 
-Skills 支持动态加载，规则变化时不修改 Agent 核心逻辑。
+当前实现由结构化 Role Prompt、Tool Contract、Graph 节点、知识文档和 Backend 规则承载；独立动态加载属于 P1/后续扩展。
 
 ---
 
@@ -865,7 +867,7 @@ Skills 支持动态加载，规则变化时不修改 Agent 核心逻辑。
 - 标准 MCP Client 和 MCP Server。
 - 结构化计划和多工具调用。
 - Redis 会话记忆和任务状态。
-- Skills 动态加载。
+- 结构化领域规则；独立 Skills 动态加载不作为 P0 完成条件。
 - 结构化输出。
 - Review 证据审查。
 - Trace。
@@ -963,7 +965,7 @@ Skills 支持动态加载，规则变化时不修改 Agent 核心逻辑。
 - MCP 和 Tool Calling。
 - Planner / Executor。
 - Memory 和 Checkpoint。
-- Skills。
+- 结构化领域规则与 Tool Contract；独立动态 Skills 为后续扩展。
 - 结构化输出。
 - Human-in-the-loop。
 - Review Agent。
@@ -988,3 +990,5 @@ V2.1 将项目交付策略明确为“Web 优先、平台解耦”：
 - MCP 第一版可采用 stdio，不要求单独端口。
 - 正式 Web 登录和 BFF 属于第二阶段。
 - 飞书接入降级为时间充足后再实现的可选能力。
+
+V2.2 同步第一版实现边界：四个 Agent 是逻辑角色；React Web 已包含 SSE、HITL 和采购详情 Context Assistant；独立 Skill Loader/版本管理不再属于 P0 验收，作为可选扩展保留。

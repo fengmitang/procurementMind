@@ -1,1098 +1,326 @@
 # 数据中心设备采购智能协同 Agent 技术方案
 
-> 版本：V1.1  
-> 日期：2026-08-04
+> 版本：V1.2
+> 更新日期：2026-08-14
+> 文档属性：当前实现方案；历史开发过程以开发任务清单和 `docs/baseline/` 为准
 
 ## 一、文档目的
 
-本文档说明当前项目最适合使用的 Agent 技术、各项技术在业务中的作用、推荐实现方式和开发优先级。
+本文描述 ProcurementMind 当前已经落地的系统架构、技术边界和可扩展方向。内容以工作区代码、配置、测试和脚本为事实来源，不把规划能力写成当前成果。
 
-项目目标不是堆叠技术名词，而是形成一条：
+系统目标是形成一条可控制、可恢复、可评测、可观测，并能安全接入真实采购业务数据的 Agent 链路。
 
-> 可控制、可恢复、可评测、可观测，并且能够安全接入真实采购业务数据的 Agent 执行链路。
+## 二、设计原则
 
----
+1. **确定性业务留在后端**：权限、状态机、必填校验、金额、黑名单、风险阈值和正式写入由采购 Backend 执行。
+2. **结论必须有依据**：实时事实来自 Tool，制度与流程来自知识库；两者冲突时以后端实时事实为准。
+3. **逻辑角色而非服务膨胀**：Router、Knowledge、Analysis、Review 和 Form Prefill 是一个 Agent 服务内的逻辑职责。
+4. **查询自动化、写入人工确认**：只读工具可自动执行，正式业务动作必须进入 HITL。
+5. **结构化和预算约束**：路由、计划、模型输出、Tool 参数与响应均有 Schema；步骤、工具、重试和总时长有上限。
+6. **全链路可诊断**：Graph、模型、检索、Tool、错误和阶段耗时进入 execution details/trace。
 
-## 二、技术设计原则
-
-### 1. 确定性业务交给后端
-
-以下内容继续由后端代码、数据库和规则完成：
-
-- 权限判断。
-- 状态流转。
-- 必填校验。
-- 金额计算。
-- 黑名单生效判断。
-- 重复申请检查。
-- 价格和数量统计。
-- 正式审批和写入。
-
-Agent 负责理解、计划、检索、调用工具、整合和解释。
-
-### 2. Agent 结论必须有依据
-
-产品、价格、供应商、采购记录和风险数字必须来自工具。
-
-制度、流程和角色规则必须来自知识库。
-
-Agent 不允许依靠常识补充内部业务事实。
-
-### 3. 先做有价值的链路，再决定是否拆 Agent
-
-第一版只保留 Router、Knowledge、Analysis、Review 四个处理角色。
-
-不为了“多 Agent”继续拆分大量角色。
-
-### 4. 查询自动化，写入人工确认
-
-只读查询可以自动执行。
-
-审批、提交、修改、备注写入等操作必须暂停并等待用户确认。
-
-### 5. 所有步骤可追踪、可测试
-
-路由、检索、计划、工具调用、审查和最终结果都需要记录。
-
----
-
-# 三、总体架构
+## 三、总体架构
 
 ```text
-                     Web 前端
-              ┌────────┴────────┐
-              │                 │
-      普通采购业务请求       智能协同请求
-              │                 │
-              ↓                 ↓
-    采购业务后端 :8000    Agent 服务 :8100
-              ↑                 │
-              │          LangGraph 工作流
-              │      Router / Knowledge / Analysis
-              │                 │
-              │          RAG / Memory / Review
-              │                 │
-              │           标准 MCP Client
-              │                 ↓
-              │     P0：stdio MCP Server，无端口
-              │     P1/P2：HTTP MCP :8200，可选
-              │                 │
-              └──────受控 HTTP──┘
-
-采购业务后端负责 MySQL、Redis、权限、状态机和正式写入。
-Agent 服务负责模型推理、规划、检索、工具编排和结果审查。
-
-可选后续入口：
-飞书适配层 → 同一 Agent API / 采购后端
+React Web :5173
+     │
+     │ /demo-api BFF（开发环境）
+     ▼
+Procurement Backend :8000 ── MySQL / Redis
+     ▲
+     │ 受签名保护的 HTTP
+     │
+Agent Service :8100
+     ├─ LangGraph / Memory / HITL
+     ├─ Model Runtime / Structured Roles
+     ├─ RAG ── Qdrant
+     └─ MCP Client ── stdio MCP Server ── HTTP ── Backend
 ```
 
----
+### 服务职责
 
-# 四、推荐技术栈
+| 服务 | 负责 | 不负责 |
+|---|---|---|
+| Procurement Backend | 身份签名校验、权限、采购状态机、业务规则、MySQL/Redis、正式写入、BFF | 模型推理和 RAG |
+| Agent Service | 问题理解、Graph 编排、模型、检索、工具调用、分析、Review、HITL 状态 | 绕过 Backend 修改采购数据 |
+| React Web | 分角色 UI、SSE、HITL、上下文助手、业务表单 | 保存网关 Secret 或直接访问采购数据库 |
+| MCP Server | 将固定只读能力映射为标准 MCP Tool | 任意 SQL、可信身份生成、直接访问 MySQL |
 
-## 1. 基础开发
+Agent 的知识同步/检索会使用知识文档状态表，但采购业务事实仍只能由 Backend API 提供。
 
-- Python 3.11 或以上。
-- FastAPI：分别提供采购后端 API 和独立 Agent API。
-- Web 前端：第一版主入口，复用现有静态体验页面并逐步扩展。
-- 服务端 Session / BFF：正式 Web 化阶段负责登录态和身份签名，不在浏览器保存网关密钥。
-- Pydantic：结构化输出、参数 Schema 和校验。
-- SQLAlchemy：访问现有 MySQL 数据。
-- Redis：会话记忆、任务状态、缓存和 Checkpoint。
-- Docker Compose：本地和演示环境部署。
-- Pytest：单元测试和 Agent 回归测试。
+## 四、当前技术栈
 
-## 2. Agent 编排
+### 4.1 后端与基础设施
 
-- LangGraph：有状态工作流、条件分支、循环、Checkpoint 和人工介入。
-- LangChain：模型、消息、Retriever 和工具等基础组件。
+- Python `>=3.12,<3.13`
+- FastAPI、Pydantic 2、Pydantic Settings
+- SQLAlchemy 2 Async、Alembic、asyncmy
+- MySQL 8.0.44、Redis 7.4、Qdrant 1.18.x
+- HTTPX、MCP Python SDK
+- Docker Compose
+- Pytest、Ruff
 
-LangGraph 是项目中的主要编排框架，LangChain 只作为底层组件使用。
+### 4.2 Agent 编排
 
-## 3. RAG
+- LangGraph 是核心工作流框架。
+- 项目依赖中没有 LangChain，当前实现不依赖 LangChain Retriever、Chain 或 Tool 抽象。
+- 会话、消息、状态和快照复用 Backend 的 Agent Session 能力；没有第二套业务状态机。
 
-- 现有 Chroma 可作为第一版向量库。
-- 保留向量库适配层，后续可替换为 Qdrant、Milvus 或 pgvector。
-- Embedding 模型用于语义召回。
-- Rerank 模型用于重排。
-- 关键词检索用于制度编号、字段名称和专有名词。
-- 混合检索结合向量和关键词结果。
+### 4.3 Web
 
-## 4. MCP
+- React 19、TypeScript 6、Vite 8
+- React Router 7（Hash Router）
+- Ant Design 6、Ant Design X 2
+- React Markdown、Vitest、Testing Library、ESLint
 
-- 使用标准 MCP Python SDK。
-- Agent 端作为 MCP Client。
-- 采购、产品、供应商和统计能力作为 MCP Server。
-- MCP Server 通过采购后端 HTTP API 使用业务能力，不直接读取 MySQL 或后端 Redis。
-- P0 使用 stdio Transport，由 Agent 服务启动本地 MCP 子进程，不占独立端口。
-- 主链路稳定后，可切换为 Streamable HTTP，并使用独立端口，例如 `8200`。
-- 是否切换远程 MCP 不影响第一版功能验收。
+旧原生静态体验页的定位已被 React Web 替代；`/demo/` 目前是 React 构建/开发基路径，不代表项目仍是单页静态原型。
 
-## 5. 可观测性
+## 五、LangGraph 工作流
 
-可以选择：
-
-- Langfuse，记录模型调用、Span、Token、费用和评测结果。
-- 或使用 OpenTelemetry + 自定义 Trace 表。
-
-第一版至少需要实现自定义 Trace ID 和完整步骤日志。
-
-## 6. 自动评测
-
-- 自建 JSON / JSONL 测试集。
-- Pytest 执行确定性评测。
-- LLM-as-a-Judge 只用于语义质量辅助评分。
-- RAG 可以结合 RAGAS 或自定义 Recall@K、引用正确率。
-- 关键业务结果必须与数据库标准答案对比，不能只依赖模型打分。
-
----
-
-# 五、LangGraph 有状态工作流
-
-## 1. 为什么适合本项目
-
-项目包含：
-
-- 三类不同业务链路。
-- 复合任务拆分。
-- 多步查询。
-- 根据中间结果调整计划。
-- Review 打回。
-- 工具失败重试。
-- 人工确认后继续。
-- 长任务恢复。
-
-这些能力不适合全部写在一个普通接口函数中。
-
-## 2. 核心状态
-
-工作流状态建议包含：
-
-- 用户原始问题。
-- 用户身份和权限范围。
-- 任务类型。
-- 子任务列表。
-- 查询条件。
-- 当前计划。
-- 已完成步骤。
-- 工具调用结果。
-- RAG 片段。
-- 初步答案。
-- Review 结果。
-- 人工确认状态。
-- 错误和重试次数。
-- Trace ID。
-
-## 3. 核心节点
-
-- 权限检查节点。
-- Router 节点。
-- 计划生成节点。
-- Knowledge 检索节点。
-- MCP 工具执行节点。
-- 结果充分性检查节点。
-- 答案生成节点。
-- Review 节点。
-- 人工确认节点。
-- 最终输出节点。
-- Trace 保存节点。
-
-## 4. 条件分支
-
-- 文档问题进入 RAG。
-- 实时业务问题进入 MCP。
-- 混合问题同时进入 RAG 和 MCP。
-- 复合任务拆成多个子任务。
-- 结果不足时继续查询。
-- Review 不通过时补查或重生成。
-- 高风险写入时暂停等待人工确认。
-- 达到最大步骤数时终止并说明原因。
-
-## 5. Checkpoint
-
-使用 Redis 或持久化存储保存工作流状态，支持：
-
-- 模型调用失败后恢复。
-- MCP 服务恢复后继续。
-- 用户确认后继续。
-- 用户关闭页面后重新进入任务。
-- 避免重复执行已完成的写入操作。
-
----
-
-# 六、Agent 角色设计
-
-## 1. Router Agent
-
-### 职责
-
-- 判断任务类型。
-- 识别复合任务。
-- 生成子任务列表。
-- 选择工作流。
-
-### 不负责
-
-- 直接回答制度问题。
-- 执行复杂查询。
-- 生成风险结论。
-
-### 适合使用的模型
-
-可使用成本较低、结构化输出稳定的小模型。
-
-### 评测重点
-
-- 分类准确率。
-- 复合任务识别率。
-- 子任务拆分正确率。
-
----
-
-## 2. Knowledge Agent
-
-### 职责
-
-- 检索采购制度、流程、角色职责和设备字段要求。
-- 结合具体采购单数据解释问题。
-- 返回文档来源和版本。
-
-### 主要技术
-
-- RAG。
-- Metadata 过滤。
-- 混合检索。
-- Rerank。
-- MCP 业务查询。
-- 引用生成。
-
-### 评测重点
-
-- 检索 Recall@K。
-- 引用正确率。
-- 回答忠实度。
-- 过期文档使用率。
-
----
-
-## 3. Analysis Agent
-
-### 职责
-
-- 复杂查询。
-- 多约束候选方案。
-- 审批异常补充调查。
-- 动态计划和多工具调用。
-- 数据整合和解释。
-
-### 主要技术
-
-- Planner / Executor。
-- MCP。
-- 并行工具调用。
-- 任务状态。
-- Memory。
-- 结构化输出。
-
-### 评测重点
-
-- 条件提取完整率。
-- 工具选择准确率。
-- 参数准确率。
-- 任务完成率。
-- 结果与数据库标准答案的一致性。
-
----
-
-## 4. Review Agent
-
-### 职责
-
-- 检查事实来源。
-- 检查用户条件是否遗漏。
-- 检查越权和编造。
-- 检查结论强度与证据是否匹配。
-- 决定通过、补查、重写或删除结论。
-
-### 输入
-
-- 用户问题。
-- 查询计划。
-- 工具调用记录。
-- RAG 片段。
-- 初步答案。
-
-### 主要技术
-
-- 结构化审查结果。
-- 证据映射。
-- 规则检查。
-- LLM 语义审查。
-
-### 注意
-
-Review Agent 不能只依靠另一个模型“自我感觉正确”。关键数字和条件仍需程序校验。
-
----
-
-# 七、RAG 技术方案
-
-## 1. 知识来源
-
-- 内部采购制度。
-- 采购流程说明。
-- 角色职责。
-- 设备字段要求。
-- 黑名单规则。
-- 系统使用说明。
-- 历史审核案例。
-- 历史异常案例。
-
-## 2. 文档处理
-
-- 解析文档正文和标题层级。
-- 按制度条款、流程步骤或问答单元切分。
-- 避免仅按固定字符数机械切分。
-- 保存原文位置，便于引用。
-
-## 3. Metadata
-
-每个片段至少记录：
-
-- 文档名称。
-- 文档类型。
-- 版本。
-- 生效时间。
-- 适用角色。
-- 适用设备类型。
-- 章节。
-- 权限范围。
-- 是否已过期。
-
-## 4. 检索流程
+主流程：
 
 ```text
-用户问题
-→ 查询改写
-→ 权限和 Metadata 过滤
-→ 向量检索
-→ 关键词检索
-→ 结果合并
-→ Rerank
-→ 去重
-→ 返回 Top-K 片段
+load_context → route
+  ├─ knowledge
+  ├─ realtime
+  ├─ knowledge → realtime（hybrid）
+  ├─ analysis
+  ├─ risk
+  └─ form_prefill
+→ sufficiency_check → compose → review → confirmation → finalize
 ```
 
-## 5. 引用要求
+### 5.1 状态
 
-最终回答中的制度结论需要附：
+Graph State 包含任务/Trace/会话标识、可信用户、消息、受限 `ui_context`、路由、已解析采购申请、证据、Tool 结果、错误、Trace 事件、分析结果、风险调查、知识结果、Review、待确认动作和表单草稿。
 
-- 文档名称。
-- 版本或生效时间。
-- 章节或片段。
-- 原文摘要。
+### 5.2 路由
 
-## 6. 失败处理
+当前支持：`KNOWLEDGE`、`REALTIME_BUSINESS`、`HYBRID`、`COMPLEX_QUERY`、`RISK_INVESTIGATION`、`FORM_PREFILL`。
 
-- 没有召回可靠内容时不回答内部制度结论。
-- 文档版本冲突时展示差异。
-- 检索服务不可用时明确说明知识部分暂不可用。
+模型 Runtime Ready 时优先使用结构化 Router；失败时回退确定性 Router。用户在页面上下文中提供的状态或草稿不是事实，Graph 必须重新调用 Tool。
 
-## 7. RAG 评测
+### 5.3 证据充分性与 Review
 
-- Recall@K。
-- MRR 或首条正确结果位置。
-- 引用正确率。
-- 忠实度。
-- 过期文档误用率。
-- 权限过滤正确率。
+- Knowledge 要求存在可回答的检索结果。
+- Realtime 要求至少一个成功 Tool。
+- Hybrid 同时要求知识和实时事实。
+- Complex Query、Risk、Form Prefill 分别要求对应结构化结果。
+- 简单 Knowledge/Realtime/Form 请求可跳过不必要的模型 Review；Hybrid、Risk 及需要模型规划的复杂查询执行语义 Review。
+- 模型 Review 失败时保留错误并使用确定性证据审查，不伪造成功。
 
----
+## 六、模型运行时
 
-# 八、MCP 和工具调用方案
+### 6.1 Adapter 与 Provider
 
-## 1. 为什么使用 MCP
-
-采购分析需要接入多类能力：
-
-- 采购记录。
-- 产品和白名单。
-- 供应商和黑名单。
-- 价格统计。
-- 风险检查。
-
-MCP 可以为 Agent 提供统一的工具发现、参数描述和调用方式，并减少 Agent 对具体后端接口的耦合。
-
-## 2. MCP 服务划分
-
-### Procurement MCP Server
-
-- 获取采购申请。
-- 查询历史采购。
-- 查询审核记录。
-- 查询状态和当前处理人。
-- 查询入库记录。
-
-### Product MCP Server
-
-- 查询白名单。
-- 查询产品分类和参数。
-- 查询兼容性。
-- 查询历史品牌和型号。
-
-### Supplier MCP Server
-
-- 查询供应商。
-- 查询黑名单。
-- 查询交付和延期。
-- 查询历史合作记录。
-
-### Analytics MCP Server
-
-- 历史价格统计。
-- 重复申请检查。
-- 数量异常检查。
-- 品牌统计。
-- 供应商履约统计。
-
-## 3. 工具设计原则
-
-- 一个工具只完成一类清晰任务。
-- 使用明确的参数 Schema。
-- 工具说明写清适用场景和限制。
-- 查询工具默认只读。
-- 返回结构化数据，不只返回自然语言。
-- 返回数据来源、时间范围和统计口径。
-- 控制最大返回行数。
-- 支持分页和聚合。
-- 不向模型暴露数据库账号。
-
-## 4. 安全控制
-
-- MCP Server 校验身份和角色。
-- 按楼宇和角色过滤数据。
-- 敏感字段脱敏。
-- 工具白名单。
-- 写入工具必须有人确认令牌。
-- 所有调用写审计日志。
-
-## 5. 稳定性
-
-- 参数校验。
-- 超时。
-- 指数退避重试。
-- 熔断。
-- 幂等。
-- 缓存。
-- 部分失败返回。
-- Fallback。
-- Trace ID 传递。
-
----
-
-# 九、Planner / Executor 和多工具调用
-
-## 1. Planner
-
-Planner 将复杂问题转换为结构化计划。
-
-计划包含：
-
-- 目标。
-- 已知条件。
-- 缺失条件。
-- 查询步骤。
-- 工具选择。
-- 步骤依赖。
-- 输出要求。
-
-## 2. Executor
-
-Executor 按计划调用工具，并把结果写入任务状态。
-
-## 3. 动态调整
-
-以下情况可以调整计划：
-
-- 工具返回为空。
-- 发现新的供应商或产品。
-- 需要补查黑名单。
-- 当前数据不足以得出结论。
-- 用户追加筛选条件。
-
-## 4. 限制
-
-- 最大步骤数。
-- 最大工具调用数。
-- 最大循环次数。
-- 总超时。
-- Token 和费用预算。
-- 重复工具调用检测。
-
-## 5. 并行调用
-
-以下查询通常可以并行：
-
-- 历史价格。
-- 黑名单。
-- 延期记录。
-- 相似案例。
-- 制度检索。
-
-使用 asyncio 并行执行，降低单次 Agent 任务延迟。
-
----
-
-# 十、Memory 和任务状态
-
-## 1. 会话记忆
-
-用于连续追问：
-
-- 时间范围。
-- 楼宇。
-- 设备。
-- 品牌。
-- 供应商。
-- 排除条件。
-- 上一轮结果摘要。
-
-## 2. 任务状态
-
-用于长任务执行：
-
-- 当前计划。
-- 已完成步骤。
-- 工具结果。
-- 待执行步骤。
-- Review 意见。
-- 人工确认状态。
-
-## 3. 存储
-
-- Redis 保存短期会话和执行状态。
-- 关键任务摘要可以持久化到 MySQL。
-- 不保存没有业务价值的长期个人画像。
-
-## 4. 记忆更新
-
-- 用户明确修改条件时覆盖旧值。
-- 不确定指代时进行一次澄清。
-- 任务结束后压缩为摘要。
-- 设置过期时间，避免旧任务污染新任务。
-
----
-
-# 十一、Skills 技术方案
-
-## 1. 作用
-
-Skills 用于承载可独立修改的领域规则，而不是把全部规则写死在 Agent 主 Prompt 中。
-
-## 2. Skill 类型
-
-- Knowledge Skill。
-- Query Skill。
-- Recommendation Skill。
-- Risk Skill。
-- Review Skill。
-
-## 3. 内容
-
-每个 Skill 包含：
-
-- 适用任务。
-- 可使用工具。
-- 禁止行为。
-- 输出要求。
-- 安全边界。
-- 失败处理。
-- 示例。
-
-## 4. 加载方式
-
-- 根据路由结果加载。
-- 根据用户角色加载。
-- 根据设备类别或风险类型补充加载。
-- 支持文件更新后重新加载。
-- 记录本次请求使用的 Skill 版本。
-
----
-
-# 十二、结构化输出
-
-## 1. 必须结构化的内容
-
-- 路由结果。
-- 子任务。
-- 查询条件。
-- 查询计划。
-- 工具参数。
-- 候选方案。
-- 风险项。
-- 证据来源。
-- Review 结果。
-- 最终报告。
-
-## 2. 技术方式
-
-- 使用 Pydantic 定义 Schema。
-- 模型通过 Structured Output 或 Function Calling 返回。
-- 校验失败时有限次数重试。
-- 仍然失败时进入降级流程。
-
-## 3. 价值
-
-- 避免自由文本难以解析。
-- 便于前端展示。
-- 支持自动评测。
-- 支持工作流恢复。
-- 支持 Review 逐项检查。
-
----
-
-# 十三、Human-in-the-loop
-
-## 1. 需要人工确认的操作
-
-- 保存审批意见。
-- 写入采购分析报告。
-- 修改正式采购单。
-- 提交采购单。
-- 审批通过或驳回。
-- 选择最终供应商。
-
-## 2. 工作流
+模型层采用 Provider-neutral 协议和注册表。当前默认注册：
 
 ```text
-Agent 生成草稿
-→ 工作流暂停
-→ 用户查看、修改或拒绝
-→ 用户确认
-→ 后端再次校验权限
-→ 执行写入
-→ 记录审计日志
+MODEL_PROVIDER=openai_compatible
 ```
 
-## 3. 防重复执行
+配置 `MODEL_BASE_URL`、`MODEL_API_KEY`、`PRIMARY_MODEL` 后 Runtime 进入 `READY`。`FALLBACK_MODEL` 可选，使用同一 Provider Adapter。
 
-人工确认节点需要使用幂等令牌，避免刷新页面或重试造成重复写入。
+Runtime 状态包括 `NOT_CONFIGURED`、`READY`、`PROVIDER_NOT_REGISTERED` 和 `INITIALIZATION_FAILED`；Agent `/ready` 会反映真实初始化状态。
 
----
+### 6.2 逻辑模型角色
 
-# 十四、权限和安全
+| 角色/Purpose | 用途 | 性能设置 |
+|---|---|---|
+| Router | 严格分类，不回答问题 | thinking 关闭，小输出上限 |
+| Query Rewrite | 生成等价检索问题 | thinking 关闭，小输出上限 |
+| Analysis Plan/Replan | 受控工具计划 | 保留 Provider 默认 thinking |
+| Compose | 依据可见证据生成业务回答 | thinking 关闭，结构化 Citation |
+| Review | 检查证据、越权、冲突和确认要求 | thinking 关闭 |
 
-## 1. 权限分层
+所有模型输出通过 Pydantic Schema 校验。Runner 支持超时、有限结构化重试、共享熔断、Primary/Fallback、流式协议兼容和 Provider 报告的用量；没有完整 Provider 用量时不会估算 Token 或费用。
 
-- 开发环境：使用现有 TEST 身份切换机制。
-- 正式 Web 环境：浏览器使用登录 Session，BFF 或服务端网关生成后端签名。
-- 浏览器不得接触 `IDENTITY_GATEWAY_SECRET`。
-- API 网关身份验证。
-- 后端业务权限。
-- MCP 工具权限。
-- 数据行级权限。
-- 文档权限。
-- 输出字段脱敏。
+## 七、RAG 技术方案
 
-## 2. Prompt Injection 防护
+### 7.1 知识来源
 
-- 用户输入不能改变工具权限。
-- RAG 文档中的指令不能覆盖系统规则。
-- 工具调用只接受 Schema 字段。
-- 高风险工具只允许固定工作流调用。
-- 对外部文档标记信任级别。
+- 索引源：`knowledge/source/` 下 7 份 Markdown。
+- 发布阅读版：`knowledge/publish/` 下对应 Word 文档，不参与索引。
+- 文档、Parent 和 Child 状态由知识同步边界维护。
 
-## 3. 审计
+### 7.2 解析与索引
 
-记录：
+- Markdown 按标题层级解析并保留章节路径。
+- 使用 Parent-Child 切分；Child 参与召回，Parent 用于补足回答上下文。
+- Metadata 包含文档、章节、版本/状态和可见性信息。
+- Qdrant Collection 同时定义命名 Dense Vector 与 BM25 Sparse Vector。
 
-- 谁发起请求。
-- 调用了什么工具。
-- 查询了哪些数据范围。
-- 是否发生人工确认。
-- 最终写入了什么。
-- 是否出现越权拦截。
-
----
-
-# 十五、稳定性和降级
-
-## 1. 模型层
-
-- 主模型超时后重试。
-- 连续失败切换备用模型。
-- 路由和字段提取可使用轻量模型。
-- 复杂分析和 Review 使用能力更强的模型。
-
-## 2. 工具层
-
-- 超时。
-- 重试。
-- 熔断。
-- 缓存。
-- 幂等。
-- 部分失败。
-
-## 3. 工作流层
-
-- 最大步骤数。
-- 最大循环次数。
-- Checkpoint。
-- 失败恢复。
-- 人工介入。
-- 任务取消。
-
-## 4. 结果层
-
-部分数据不可用时，输出：
-
-- 已完成的分析范围。
-- 缺少的数据源。
-- 哪些结论因此无法确认。
-- 是否建议人工补查。
-
----
-
-# 十六、Trace 和可观测性
-
-## 1. Trace 内容
-
-- 用户问题。
-- 身份和权限。
-- 路由结果。
-- Skill 版本。
-- 计划。
-- RAG 召回。
-- 工具调用。
-- 模型调用。
-- 耗时。
-- Token 和费用。
-- Review 结果。
-- 错误和重试。
-- 最终结果。
-- 用户反馈。
-
-## 2. 指标
-
-- 请求成功率。
-- 路由准确率。
-- 工具成功率。
-- 平均步骤数。
-- 平均延迟。
-- 平均 Token。
-- 平均费用。
-- Review 打回率。
-- 任务完成率。
-- 人工确认率。
-
-## 3. 展示
-
-提供简单的 Trace 页面，按时间线展示每一步。
-
-这既用于排错，也用于项目演示。
-
----
-
-# 十七、Agent 评测方案
-
-## 1. 测试集
-
-准备覆盖以下类型的问题：
-
-- 纯知识问题。
-- 实时业务问题。
-- 混合问题。
-- 单工具查询。
-- 多工具查询。
-- 连续追问。
-- 多约束推荐。
-- 审批风险调查。
-- 权限越界问题。
-- 工具失败问题。
-- 文档冲突问题。
-
-## 2. 评测方法
-
-### 确定性评测
-
-适用于：
-
-- 路由。
-- 字段和条件提取。
-- 工具选择。
-- 工具参数。
-- 数据查询结果。
-- 权限控制。
-
-### 检索评测
-
-适用于：
-
-- Recall@K。
-- MRR。
-- 引用正确率。
-- 过期文档误用率。
-
-### 语义评测
-
-适用于：
-
-- 回答完整性。
-- 解释清晰度。
-- 风险摘要质量。
-- 是否忠于证据。
-
-语义评测使用人工评分或 LLM-as-a-Judge，但不能替代数据库标准答案。
-
-## 3. 回归测试
-
-每次修改以下内容后运行固定测试集：
-
-- Prompt。
-- Skill。
-- 路由规则。
-- RAG 切分。
-- Embedding。
-- Rerank。
-- 工具描述。
-- 模型版本。
-- 工作流节点。
-
----
-
-# 十八、受控自然语言数据查询
-
-## 1. 第一版方式
+### 7.3 检索流程
 
 ```text
-自然语言
-→ Agent 提取结构化查询条件
-→ 后端查询 DSL
-→ 后端生成安全 SQL
-→ 执行并返回结构化结果
+Query Rewrite（可选）
+   ├─ Dense recall
+   └─ BM25 Sparse recall
+        ↓
+      RRF fusion
+        ↓
+      Rerank
+        ↓
+Metadata/可见性过滤 + Parent 回查
+        ↓
+Citation / Retrieval Trace / Context
 ```
 
-Agent 不直接生成并执行 SQL。
+### 7.4 Provider
 
-## 2. 查询 DSL
+当前实现支持：
 
-可以包含：
+| Provider | Embedding | Rerank | 定位 |
+|---|---|---|---|
+| `aliyun_bailian` | 默认 `qwen3.7-text-embedding` | 默认 `qwen3-rerank` | 当前默认，适合规避本地 CPU 延迟 |
+| `local_bge` | 本地 BGE 路径 | 本地 BGE Reranker 路径 | 可选离线模式，CPU 较慢，可配置 CUDA |
 
-- 时间范围。
-- 楼宇。
-- 设备。
-- 品牌。
-- 供应商。
-- 金额范围。
-- 状态。
-- 分组方式。
-- 排序方式。
-- 聚合方式。
-- 排除条件。
+RAG 可使用独立 `RAG_API_KEY`/`RAG_BAILIAN_BASE_URL`，空值时复用生成模型配置。
 
-## 3. 后续 Text2SQL
+### 7.5 Collection 规则
 
-时间充足时再增加受控 Text2SQL，并限制：
+Dense 模型、Provider、维度或向量 Schema 变化时必须新建/重建 Provider-specific Collection。`.env.example` 当前使用 `procurement_knowledge_child_qwen37` 和 1024 维 Dense。Qdrant 会校验 Collection Schema，避免把不兼容向量写入已有索引。
 
-- 只读。
-- 表和字段白名单。
-- SQL 解析检查。
-- LIMIT。
-- 执行超时。
-- 最大返回行数。
-- 禁止危险语句。
-- 查询审计。
+Chroma 是历史早期选型，当前运行链路已由 Qdrant 替代。配置类和 Dockerfile 中仍有兼容性遗留字段/目录，但不代表 Chroma 是当前 RAG 存储。
 
----
+## 八、MCP 与 Tool
 
-# 十九、多模型策略
+### 8.1 当前部署
 
-该能力属于第二阶段加分项。
+当前只有一个 `agent_app.mcp.server` stdio MCP Server。Agent Client 为每次可信调用注入平台身份与 Trace，启动标准 MCP 会话并调用固定工具。
 
-可以分工：
+`procurement`、`product`、`supplier`、`analytics` 是 catalog namespace，不是四个服务进程。HTTP MCP 尚未实现，只能作为未来扩展。
 
-- 小模型：路由、字段提取和简单分类。
-- 主模型：计划和综合分析。
-- 强模型：复杂 Review。
-- Embedding 模型：RAG。
-- Rerank 模型：检索重排。
+### 8.2 工具边界
 
-系统记录每种模型的：
+工具覆盖当前用户、采购申请、履历、历史采购、产品/供应商推荐、受控采购分析、风险信号、相似案例和供应商履约。
 
-- 延迟。
-- Token。
-- 成本。
-- 正确率。
+- 参数由 Pydantic/JSON Schema 限制。
+- 身份和 Trace 不允许模型传入。
+- MCP 只通过 Backend HTTP Client 获取事实。
+- 分析使用白名单 DSL，不接受 SQL。
+- 工具调用有超时、重试分类、熔断和最大次数。
 
-根据任务复杂度选择模型，而不是全部使用同一个大模型。
+## 九、Planner / Executor
 
----
+复杂查询使用结构化 `AnalysisPlan`。Planner 只能选择固定只读工具枚举，并只能生成允许的 Query DSL 字段、分组、聚合、排序和分页。
 
-# 二十、部署与平台接入方案
+Executor 按依赖执行步骤，支持安全独立步骤并行、部分成功保留和一次受控重规划。简单单记录查询不会为了展示复杂度而强制经过 Planner。
 
-## 1. P0 本地与演示部署
+## 十、Memory 与状态恢复
 
-第一版建议只维护两个网络服务：
+- MySQL 保存 Agent Conversation、Message、State 和 Snapshot。
+- Redis 用于会话状态缓存和 TTL。
+- Graph 使用既有 `conversation_id` 作为线程标识。
+- 每轮结束保存 Agent 消息、结构化 message data、状态和快照。
+- Redis 状态不可用时可由 Backend 持久化状态恢复。
 
-- 采购业务后端：`http://127.0.0.1:8000`
-- Agent 服务：`http://127.0.0.1:8100`
-- MCP Server：使用 stdio，由 Agent 服务启动，不占端口
-- MySQL。
-- Redis。
-- Chroma 或其他向量数据库。
-- Web 前端：可继续由采购后端静态挂载，或作为独立静态服务。
+## 十一、领域规则与 Skills 状态
 
-调用方式：
+当前代码没有独立 `skills/` 目录、动态 Skill Loader、Skill 版本管理或管理页面。因此 Skills 不是已实现核心技术。
 
-```text
-Web 前端
-├─ 普通采购请求 → 采购后端 :8000
-└─ 智能请求     → Agent 服务 :8100
-                         ↓ stdio
-                    MCP Server
-                         ↓ HTTP
-                    采购后端 :8000
-```
+领域规则目前由以下机制承载：
 
-## 2. P1 正式 Web 化
+- 结构化 Role Prompt 与输出 Schema。
+- MCP Tool Contract 和 catalog metadata。
+- LangGraph 节点、路由与证据规则。
+- Procurement Backend 的确定性权限、风险和状态机。
+- 知识源文档与 Metadata。
 
-增加：
+独立、可版本化、可动态加载的 Skill 系统属于后续可选扩展；引入前必须明确规则所有权、审计、灰度和回滚机制。
 
-- Web 登录。
-- 服务端 Session。
-- BFF 或 Web 身份网关。
-- CSRF、Cookie 和会话安全。
-- 更完整的采购工作台和知识库管理页面。
+## 十二、结构化输出
 
-Web BFF 在服务端持有身份签名密钥，浏览器只持有 Session Cookie。
+必须结构化的内容包括路由、Query Rewrite、分析计划、Compose/Citation、Review、检索结果、Tool 响应、风险调查、待确认动作和表单草稿。Schema 校验失败会有限重试或进入受控降级，不把自由文本解析为正式业务动作。
 
-## 3. P2 可选扩展
+## 十三、Human-in-the-loop
 
-时间充足时增加：
+可能产生的动作包括创建草稿、提交申请、审批通过/驳回、选择最终供应商、登记采购结果、提交入库、记录入库和完成采购。
 
-- MCP Streamable HTTP 服务，例如 `http://127.0.0.1:8200/mcp`。
-- 飞书应用和身份映射。
-- 飞书消息、卡片渲染和按钮回调。
-- 飞书适配层调用同一 Agent API，不复制 Agent 业务逻辑。
+Graph 只生成 `pending_action`。确认流程校验用户身份、会话、action ID、一次性 token、15 分钟有效期、重复/并发状态，再调用 Backend 原有 API。取消、过期或已消费 token 不会执行写入。
 
-## 4. 配置管理
+## 十四、权限与安全
 
-- 模型密钥和身份网关密钥通过环境变量或密钥服务管理。
-- 开发、测试和生产配置分离。
-- Skill、Prompt 和知识库版本可记录。
-- 不在代码仓库或浏览器中提交真实密钥。
+- Backend HMAC 身份网关绑定平台类型、用户、时间戳、Nonce 和请求。
+- 浏览器只走 BFF，不持有 Secret。
+- Backend 根据角色和楼宇范围裁剪数据。
+- Prompt Boundary 标记知识与用户输入，阻止注入内容成为系统指令。
+- Agent 不公开数据库主键、内部 Prompt、Chunk、Graph、Tool 或原始技术异常。
+- 正式写入继续使用 `expected_version` 和 `action_token`。
+- 管理员有独立信息架构；采购与供应商全局查询为只读，员工变更记录操作审计。
 
-## 5. CI/CD
+## 十五、稳定性与性能
 
-时间允许时增加：
+- 模型：超时、结构化重试、Primary/Fallback、熔断。
+- MCP：启动/工具超时、后端重试、熔断、结构化错误。
+- Graph：最大步骤、最大工具调用、总任务超时、证据充分性和安全降级。
+- RAG：Embedding、Rewrite、Retrieval Cache；远程 API 重试；批量 embedding/upsert。
+- 性能优化：按 Role 限制输出 token、关闭不必要 thinking、简单请求跳过 Planner/Review、记录模型/检索/重排/Tool 与持久化阶段耗时。
 
-- 代码检查。
-- 单元测试。
-- Agent 回归测试。
-- Docker 镜像构建。
-- 自动部署测试环境。
+缓存不替代权限检查或后端权威事实。
 
----
+## 十六、Trace 与可观测性
 
-# 二十一、业务方向与技术对应
+当前使用项目自研 execution details 和 trace events，记录：
 
-| 业务方向 | 核心技术 |
-|---|---|
-| 采购知识与业务问答 | Router、RAG、混合检索、Rerank、引用、MCP、权限过滤、Review |
-| 采购复杂查询与分析 | LangGraph、Planner/Executor、MCP、多工具调用、并发、Memory、结构化输出 |
-| 多约束候选方案 | 条件提取、查询 DSL、工具组合、排序解释、Review |
-| 审批辅助与异常调查 | 后端规则、MCP、RAG案例检索、并行调查、风险结构化输出、Human-in-the-loop |
-| 连续追问 | Redis Memory、任务状态、Checkpoint |
-| 结果可信度 | Review Agent、证据映射、Trace、自动评测 |
-| 生产可靠性 | 超时、重试、熔断、Fallback、权限、审计、Docker |
+- 路由、Graph 节点、状态和耗时。
+- Tool 名称、参数、结果、来源、错误与耗时。
+- Retrieval 候选、融合、Rerank、Citation 和阶段耗时。
+- 模型 Purpose、主模型/实际模型、Fallback、重试、首 token、解析与校验耗时。
+- 整体 Graph、准备身份/会话、消息持久化和请求总耗时。
 
----
+Langfuse 和 OpenTelemetry 当前未集成，可作为未来集中观测方案，不应写成当前能力。
 
-# 二十二、开发优先级
+## 十七、评测方案
 
-## 第一阶段：必须完成
+### 17.1 已实现评测
 
-1. 可运行的 Web 智能协同入口。
-2. 采购后端与 Agent 服务独立运行。
-3. stdio 标准 MCP 主链路。
-4. LangGraph 有状态工作流。
-5. Router、Knowledge、Analysis、Review 四个处理角色。
-6. RAG 基础链路和来源引用。
-7. 结构化查询计划和多工具调用。
-8. Redis 会话记忆和任务状态。
-9. Skills。
-10. Pydantic 结构化输出。
-11. Trace。
-12. 基础评测集。
-13. Docker Compose。
+- Deterministic：Router、Tool Security、Analysis、Risk。
+- RAG：Dense、Sparse、Hybrid、Rerank、路由、引用、负例与 baseline 比较。
+- Agent Acceptance：25 条固定 Agent API 用例，覆盖五类主业务场景。
+- Lightweight RAG Acceptance：10 条固定规则/权限/拒答用例。
+- Delivery Demo：知识、复杂查询和风险等演示链路。
+- Performance Benchmark：本地 CPU/API RAG、Agent 阶段耗时与优化前后比较。
 
-## 第二阶段：明显加分
+### 17.2 指标
 
-1. 正式 Web 登录、Session 和 BFF。
-2. 完整 Web 采购工作台和知识库管理页面。
-3. 混合检索和 Rerank。
-4. 并行工具调用。
-5. Checkpoint 和完整恢复。
-6. 超时、重试、熔断和 Fallback。
-7. Human-in-the-loop 写入。
-8. 成本和延迟统计。
-9. Prompt 和工作流回归测试。
-10. 受控查询 DSL。
-11. 多模型分工。
+路由准确率、任务成功率、工具准确率、召回/排序指标、Citation、负例拒答、工具与模型调用数、平均/P50/P95 耗时、错误分布和模型/检索/重排/工具阶段耗时。
 
-## 第三阶段：时间充足再做
+评测结果写入 `.artifacts/`。历史 baseline 只记录生成时的可验证事实；新模型、索引或数据环境的结果应生成新工件/新版本，不能改写旧 baseline。
 
-1. 飞书适配层和消息卡片。
-2. MCP Streamable HTTP 独立服务。
-3. 受控 Text2SQL。
-4. 长期记忆。
-5. 云部署和 CI/CD。
-6. 更复杂的多 Agent 协作。
-7. 自动反馈数据沉淀。
+## 十八、受控自然语言查询
 
----
+第一版不是 Text2SQL。模型只能生成 `PurchaseQueryRequest` 允许的过滤、分组、聚合、排序和分页字段；Backend 再执行权限裁剪、范围限制、扫描上限和超时。任意 SQL 与模型直接访问数据库均不在当前范围。
 
-# 二十三、不建议强行加入的技术
+## 十九、Web 与 BFF
 
-- 为展示而拆成大量微服务。
-- Kafka 等与当前业务规模不匹配的消息中间件。
-- 无真实需求的高并发压测。
-- 模型微调。
-- GPU 推理。
-- 自动审批。
-- 完全自动采购决策。
-- 十几个 Agent。
-- 复杂用户画像。
-- 任意 SQL。
-- 无业务依据的长期记忆。
+React Web 包含工作台、智能助手、采购申请、岗位流程、供应商、上下文助手和 Admin 页面。Agent SSE 事件通过 Backend BFF 转发，包含 conversation、thinking/analyzing、Citation、Tool 摘要、确认请求、正文与 completed/error。
 
----
+当前 `compose.yaml` 没有 frontend service，Dockerfile 也没有 Node build stage。开发态由 Vite 5173 提供；生产静态托管或独立 Web 容器属于尚待补齐的部署工作。
 
-# 二十四、项目最终技术亮点
+## 二十、部署
 
-最终项目应能够说明：
+当前 Compose 已实现 MySQL、Redis、Qdrant、migration、Backend 和 Agent，包含健康检查、网络与数据卷。Agent 数据卷用于本地运行数据，Qdrant/MySQL/Redis 各自持久化。
 
-1. 使用 LangGraph 组织可恢复的有状态 Agent 工作流。
-2. 使用 RAG 将内部采购制度和实时业务数据结合回答。
-3. 使用标准 MCP 接入采购、产品、供应商和统计能力。
-4. 使用 Planner / Executor 完成动态多工具查询。
-5. 使用 Redis 保存连续分析上下文和工作流状态。
-6. 使用 Skills 管理可热更新的业务规则和安全边界。
-7. 使用 Review Agent 基于工具结果和文档证据审查结论。
-8. 使用 Human-in-the-loop 控制正式写入和审批操作。
-9. 使用 Trace 和自动评测持续检查路由、检索、工具和最终任务质量。
-10. 使用超时、重试、熔断、Fallback 和权限校验提高可靠性。
+当前未完成或不应误报为已完成：
 
-这十项比“使用了多少个 Agent”更能体现 Agent 应用开发能力。
+- 独立 frontend 容器/生产反向代理。
+- HTTP MCP。
+- 完整外部平台身份适配。
+- 独立 Skills 系统。
+- Langfuse/OpenTelemetry 集成。
+- 知识库管理、Skill 管理和评测结果管理页面。
 
----
+## 二十一、当前技术亮点
 
-# 二十五、本次版本调整说明
+1. 采购 Backend 与 Agent 服务职责清晰，确定性规则不交给模型。
+2. LangGraph 六类路由统一编排知识、实时、分析、风险和表单场景。
+3. Provider-neutral 结构化模型 Runtime 支持 Primary/Fallback 和受控降级。
+4. Qdrant Dense + BM25、RRF、Rerank、Parent-Child 与 Citation 形成完整 RAG。
+5. 单一标准 stdio MCP 通过 namespace 管理只读工具，并保持数据库安全边界。
+6. SSE、HITL 和 Context Assistant 把 Agent 能力嵌入真实采购页面。
+7. Trace、固定评测集和阶段耗时让质量与性能可回归。
 
-V1.1 对部署和平台边界作出以下调整：
+## 二十二、版本调整说明
 
-- 网页版是第一版唯一必须完成的用户入口。
-- 采购后端和 Agent 服务采用不同进程、不同端口。
-- MCP 第一版使用 stdio，不强制占用第三个端口。
-- 正式 Web 登录和 BFF 作为 P1。
-- 飞书和远程 HTTP MCP 作为 P2 可选扩展。
+V1.2 将原“规划方案”同步为当前实现：固定 Python 3.12，移除未使用的 LangChain，使用 Qdrant 替代 Chroma，明确百炼/本地 BGE Provider、React Web、单一 stdio MCP、非独立 Skills 现状、自研 Trace 和已实现评测；未来扩展与当前能力分开表述。

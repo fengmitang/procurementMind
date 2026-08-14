@@ -413,7 +413,7 @@ class AgentSessionService:
         snapshot.current_action = state.current_action
         snapshot.state_data = self._snapshot_state_data(state, snapshot_reason)
         snapshot.missing_fields = state.missing_fields
-        snapshot.confirmed = snapshot_reason == "USER_CONFIRMED"
+        snapshot.confirmed = snapshot_reason in {"USER_CONFIRMED", "HITL_EXECUTED"}
         snapshot.saved_at = now
         conversation.purchase_request_id = state.purchase_request_id
         conversation.last_active_at = now

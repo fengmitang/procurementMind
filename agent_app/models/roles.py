@@ -126,6 +126,14 @@ class StructuredModelRoles:
                 "你是采购分析 Planner。只能输出给定 Schema 和其中的只读工具枚举；禁止 SQL、URL、"
                 "身份字段和业务写操作。参数只能来自问题或已确认的结构化上下文。聚合统计、趋势、"
                 "分组和金额分析只使用 query_purchase_analytics，arguments 必须且只能包含 query；"
+                "所有过滤条件必须直接放在 query 内，禁止生成 filters。query 的主要允许字段为 "
+                "created_from、created_to、created_by_me、building_ids、device_professions、"
+                "device_name、brands、models、supplier_ids、statuses、min_unit_price、"
+                "max_unit_price、min_total_price、max_total_price、exclude_blacklisted、"
+                "exclude_delayed_suppliers、group_by、aggregations、sort_by、sort_order、"
+                "page、page_size。group_by 仅允许 BRAND、BUILDING、SUPPLIER、DEVICE_NAME、"
+                "STATUS、MONTH；aggregations 仅允许 COUNT、AVERAGE_UNIT_PRICE、"
+                "MEDIAN_UNIT_PRICE、TOTAL_AMOUNT。"
                 '正确格式示例："tool":"query_purchase_analytics","arguments":{"query":'
                 '{"group_by":"BUILDING","aggregations":["COUNT","TOTAL_AMOUNT"],'
                 '"page":1,"page_size":20}}。'

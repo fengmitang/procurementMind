@@ -296,6 +296,10 @@ class AnalyticsService:
             elif payload.group_by is AnalyticsGroupBy.SUPPLIER:
                 key = str(row.supplier_id) if row.supplier_id is not None else "NONE"
                 label = row.supplier_name or "未选择供应商"
+            elif payload.group_by is AnalyticsGroupBy.STATUS:
+                key = label = str(row.request.status)
+            elif payload.group_by is AnalyticsGroupBy.MONTH:
+                key = label = row.request.created_at.strftime("%Y-%m")
             else:
                 key = label = row.request.device_name or "未填写"
             grouped[(key, label)].append(row)

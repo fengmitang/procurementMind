@@ -46,7 +46,7 @@ function BusinessFields({ value }: { value: Record<string, unknown> }) {
   }))} />
 }
 
-function HitlCard({ action, conversationId, onDone }: { action: PendingAction; conversationId: number; onDone: (text: string) => void }) {
+function HitlCard({ action, conversationId, onDone }: { action: PendingAction; conversationId: number; onDone: (actionId: string, text: string) => void }) {
   const { agent } = useIdentity(); const { message } = App.useApp(); const [loading, setLoading] = useState(false)
   const isDraft = action.action_type === 'CREATE_PURCHASE_DRAFT'
   const decide = async (type: 'confirm' | 'cancel') => {
@@ -57,7 +57,7 @@ function HitlCard({ action, conversationId, onDone }: { action: PendingAction; c
       const text = type === 'confirm'
         ? isDraft ? `采购申请草稿已创建${detail?.requirement_no ? `：${detail.requirement_no}` : ''}，尚未提交审批。` : '操作已确认，正式结果已由后端校验。'
         : '已取消本次操作。'
-      message.success(text); onDone(text)
+      message.success(text); onDone(action.action_id, text)
     } catch (err) { message.error(err instanceof Error ? err.message : '操作失败') } finally { setLoading(false) }
   }
   return <Card className="hitl-card" title={isDraft ? '待确认的采购申请草稿' : '需要你确认的正式操作'} size="small">
@@ -81,7 +81,7 @@ function BusinessResultCards({ groups }: { groups: BusinessResult[] }) {
   </Card>)}</>
 }
 
-function AssistantContent({ message, onHitlDone }: { message: AgentMessage; onHitlDone: (text: string) => void }) {
+function AssistantContent({ message, onHitlDone }: { message: AgentMessage; onHitlDone: (actionId: string, text: string) => void }) {
   const data = message.data; const sources = data?.knowledge_sources || []; const tools = data?.execution?.tools || []
   if (message.status === 'loading') return <div className="assistant-answer">{message.content && <ReactMarkdown>{localizeBusinessText(message.content)}</ReactMarkdown>}<Typography.Text type="secondary">{message.streamStatus || '正在理解你的问题'}</Typography.Text></div>
   if (message.status === 'error') return <Alert type="error" showIcon title="本次回答失败" description={message.error} />
@@ -111,10 +111,23 @@ export function AssistantPage() {
   const loadMessages = useCallback(async (conversation: Conversation) => {
     if (!conversation.backendId || conversation.loaded) return
     try {
-      const response = await backend.agentMessages(conversation.backendId)
+      const [response, state] = await Promise.all([
+        backend.agentMessages(conversation.backendId),
+        backend.agentState(conversation.backendId),
+      ])
+      const currentActionId = state.awaiting_confirmation
+        ? String((state.collected_data.pending_action as Record<string, unknown> | undefined)?.action_id || '')
+        : ''
       const messages: AgentMessage[] = response.items.filter((item) => item.sender_type !== 'SYSTEM').map((item) => ({
         id: `stored-${item.message_id}`, role: item.sender_type === 'USER' ? 'user' : 'assistant', content: item.content,
-        createdAt: item.created_at, status: 'success', data: item.message_data as AgentChatData | undefined,
+        createdAt: item.created_at, status: 'success', data: item.message_data
+          ? {
+              ...item.message_data,
+              pending_action: item.message_data.pending_action?.action_id === currentActionId
+                ? item.message_data.pending_action
+                : null,
+            } as AgentChatData
+          : undefined,
       }))
       updateConversation(conversation.key, (value) => ({ ...value, messages, loaded: true }))
       stickToBottom.current = true
@@ -175,7 +188,7 @@ export function AssistantPage() {
   return <div className="assistant-page"><aside className="conversation-panel"><div className="conversation-brand"><RobotOutlined /><div><strong>智能采购助手</strong><span>会话由业务系统保存</span></div></div><Conversations creation={{ label: '新建会话', icon: <PlusOutlined />, onClick: newChat }} activeKey={activeKey} onActiveChange={(key) => setActiveKey(String(key))} items={conversations.map((item, index) => ({ key: item.key, label: item.label, group: index === 0 ? '最近' : '历史会话' }))} groupable /></aside>
     <section className="chat-panel"><div className="chat-header"><div><strong>智能采购助手</strong><span>{active?.label || '新会话'} · {user.name}</span></div><Tag color="processing">在线</Tag></div>
       <div className="message-scroll" ref={scrollRef} onScroll={(event) => { const target = event.currentTarget; stickToBottom.current = target.scrollHeight - target.scrollTop - target.clientHeight < 100 }}>
-        {!active?.loaded ? <div className="center-state"><Spin description="正在加载消息" /></div> : !active.messages.length ? <div className="assistant-welcome"><Welcome icon={<Avatar size={50} icon={<RobotOutlined />} />} title="你好，我是采购智能助手" description="我可以查询采购规则和真实业务进度，也可以协助整理采购申请草稿。正式操作都会先请你确认。" /><Prompts title="你可以这样问" items={prompts} wrap onItemClick={({ data }) => submit(String(data.label))} /></div> : <Bubble.List items={bubbleItems} role={{ user: { placement: 'end', avatar: <Avatar icon={<UserOutlined />} />, variant: 'filled' }, ai: { placement: 'start', avatar: <Avatar icon={<RobotOutlined />} />, variant: 'outlined', contentRender: (_, info) => { const item = info.extraInfo?.item as AgentMessage; return <AssistantContent message={item} onHitlDone={(text) => updateConversation(active.key, (value) => ({ ...value, messages: [...value.messages, { id: crypto.randomUUID(), role: 'assistant', content: text, createdAt: new Date().toISOString(), status: 'success' }] }))} /> } } }} />}
+        {!active?.loaded ? <div className="center-state"><Spin description="正在加载消息" /></div> : !active.messages.length ? <div className="assistant-welcome"><Welcome icon={<Avatar size={50} icon={<RobotOutlined />} />} title="你好，我是采购智能助手" description="我可以查询采购规则和真实业务进度，也可以协助整理采购申请草稿。正式操作都会先请你确认。" /><Prompts title="你可以这样问" items={prompts} wrap onItemClick={({ data }) => submit(String(data.label))} /></div> : <Bubble.List items={bubbleItems} role={{ user: { placement: 'end', avatar: <Avatar icon={<UserOutlined />} />, variant: 'filled' }, ai: { placement: 'start', avatar: <Avatar icon={<RobotOutlined />} />, variant: 'outlined', contentRender: (_, info) => { const item = info.extraInfo?.item as AgentMessage; return <AssistantContent message={item} onHitlDone={(actionId, text) => updateConversation(active.key, (value) => ({ ...value, messages: [...value.messages.map((entry) => entry.data?.pending_action?.action_id === actionId ? { ...entry, data: { ...entry.data, pending_action: null } } : entry), { id: crypto.randomUUID(), role: 'assistant', content: text, createdAt: new Date().toISOString(), status: 'success' }] }))} /> } } }} />}
       </div>
       <div className="sender-wrap"><Sender value={input} onChange={setInput} loading={busy} placeholder="询问采购规则、采购单进度，或描述采购需求…" onSubmit={submit} /><Typography.Text type="secondary">正式业务操作会在你确认后执行。</Typography.Text></div>
     </section></div>

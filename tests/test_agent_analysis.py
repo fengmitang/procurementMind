@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from agent_app.analysis.executor import AnalysisExecutor
 from agent_app.analysis.planner import DeterministicAnalysisPlanner
@@ -139,6 +140,35 @@ async def test_deterministic_planner_builds_whitelisted_query() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "group_by", "aggregations"),
+    [
+        ("按状态统计采购申请数量", AnalyticsGroupBy.STATUS, [AnalyticsAggregation.COUNT]),
+        ("分析今年采购申请数量的月度趋势", AnalyticsGroupBy.MONTH, [AnalyticsAggregation.COUNT]),
+        ("统计已完成采购申请的总金额", None, [AnalyticsAggregation.TOTAL_AMOUNT]),
+        (
+            "按设备名称统计采购数量并给出排名",
+            AnalyticsGroupBy.DEVICE_NAME,
+            [AnalyticsAggregation.COUNT],
+        ),
+    ],
+)
+async def test_deterministic_planner_supports_acceptance_aggregations(
+    message: str,
+    group_by: AnalyticsGroupBy | None,
+    aggregations: list[AnalyticsAggregation],
+) -> None:
+    plan = await DeterministicAnalysisPlanner().create_plan(message)
+
+    assert plan.query_context is not None
+    assert plan.query_context.group_by is group_by
+    assert plan.query_context.aggregations == aggregations
+    if "已完成" in message:
+        assert plan.query_context.statuses == ["COMPLETED"]
+    assert plan.steps[0].arguments == {"query": plan.query_context.model_dump(mode="json")}
+
+
+@pytest.mark.asyncio
 async def test_follow_up_inherits_only_structured_query_conditions() -> None:
     planner = DeterministicAnalysisPlanner()
     first = await planner.create_plan("查询 2026-01-01 到 2026-06-30 的服务器采购，排除黑名单")
@@ -215,7 +245,25 @@ def test_context_single_tool_shortcuts_skip_model_planner() -> None:
     assert (
         ProcurementGraphService._should_use_model_planner("查看采购申请 91003 的相似案例") is False
     )
-    assert ProcurementGraphService._should_use_model_planner("统计各楼宇采购金额并比较趋势") is True
+    for message in (
+        "按状态统计采购申请数量",
+        "分析各楼宇的采购申请数量并进行对比",
+        "统计已完成采购申请的总金额",
+        "按设备名称统计采购数量并给出排名",
+        "分析今年采购申请数量的月度趋势",
+    ):
+        assert ProcurementGraphService._should_use_model_planner(message) is False
+    assert ProcurementGraphService._should_use_model_planner("筛选哪些采购申请需要综合研判") is True
+
+
+def test_analysis_plan_rejects_filters_outside_query() -> None:
+    with pytest.raises(ValidationError):
+        AnalysisPlanStep(
+            step_id="invalid_filters",
+            objective="非法 Planner 输出",
+            tool=AnalysisToolName.QUERY_PURCHASE_ANALYTICS,
+            arguments={"query": {"aggregations": ["TOTAL_AMOUNT"]}, "filters": {}},
+        )
 
 
 @pytest.mark.asyncio
@@ -515,7 +563,7 @@ async def test_complex_query_calls_model_planner_and_records_plan_trace() -> Non
         configured,
         mcp_client_factory=factory,
         model_roles=roles,
-    ).run(graph_request("统计各楼宇采购数量和总金额"))
+    ).run(graph_request("筛选哪些采购申请需要综合研判"))
 
     assert [request.purpose for request in adapter.requests] == [
         ModelPurpose.ANALYSIS_PLAN,

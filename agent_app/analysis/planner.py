@@ -49,6 +49,45 @@ class DeterministicAnalysisPlanner:
         "其他",
     )
 
+    @staticmethod
+    def supports_single_tool_query(message: str) -> bool:
+        """Return whether the controlled query DSL can express this in one call."""
+        normalized = "".join(message.lower().split())
+        supported_markers = (
+            "统计",
+            "汇总",
+            "总金额",
+            "采购金额",
+            "平均单价",
+            "中位价",
+            "按状态",
+            "各状态",
+            "按楼宇",
+            "各楼宇",
+            "按供应商",
+            "各供应商",
+            "按品牌",
+            "各品牌",
+            "按设备",
+            "各设备",
+            "按月",
+            "每月",
+            "月度",
+            "月份",
+            "排名",
+            "趋势",
+        )
+        multi_tool_markers = (
+            "相似案例",
+            "供应商履约",
+            "供应商风险",
+            "风险信号",
+            "推荐供应商",
+        )
+        return any(marker in normalized for marker in supported_markers) and not any(
+            marker in normalized for marker in multi_tool_markers
+        )
+
     async def create_plan(
         self,
         message: str,
@@ -153,6 +192,10 @@ class DeterministicAnalysisPlanner:
             year = int(year_match.group(1)) if year_match else date.today().year
             values["created_from"] = date(year, month, 1)
             values["created_to"] = date(year, month, monthrange(year, month)[1])
+        elif "今年" in message:
+            today = date.today()
+            values["created_from"] = date(today.year, 1, 1)
+            values["created_to"] = today
         dates = re.findall(r"\b(20\d{2}-\d{2}-\d{2})\b", message)
         if dates:
             values["created_from"] = date.fromisoformat(dates[0])
@@ -187,11 +230,25 @@ class DeterministicAnalysisPlanner:
             values["min_unit_price"] = minimum.group(1)
         if maximum:
             values["max_unit_price"] = maximum.group(1)
+        status_mapping = {
+            "草稿": "DRAFT",
+            "待审批": "PENDING_REVIEW",
+            "已驳回": "REJECTED",
+            "待采购": "PENDING_PURCHASE",
+            "采购中": "PURCHASING",
+            "待入库": "PENDING_WAREHOUSE",
+            "已完成": "COMPLETED",
+        }
+        statuses = [status for marker, status in status_mapping.items() if marker in message]
+        if statuses:
+            values["statuses"] = list(dict.fromkeys(statuses))
         if "排除" in message and "黑名单" in message:
             values["exclude_blacklisted"] = True
         if ("排除" in message and "延期供应商" in message) or "排除有延期的供应商" in message:
             values["exclude_delayed_suppliers"] = True
         group_mapping = {
+            AnalyticsGroupBy.STATUS: ("按状态", "各状态"),
+            AnalyticsGroupBy.MONTH: ("按月", "每月", "月度", "月份"),
             AnalyticsGroupBy.BUILDING: ("按楼宇", "各楼宇"),
             AnalyticsGroupBy.SUPPLIER: ("按供应商", "各供应商"),
             AnalyticsGroupBy.BRAND: ("按品牌", "各品牌"),
@@ -274,6 +331,15 @@ class ModelBackedAnalysisPlanner:
                         "你是采购分析 Planner。只能输出给定 Schema，且只能选择 Schema 中的"
                         "只读工具枚举。不得生成 SQL、URL、身份字段或审批结论。工具参数必须"
                         "来自用户问题；连续追问只能继承提供的已确认查询上下文。"
+                        "query_purchase_analytics.arguments 必须且只能包含 query；所有过滤"
+                        "条件必须直接放在 query 内，禁止生成 filters。query 允许的主要字段为"
+                        "created_from、created_to、created_by_me、building_ids、"
+                        "device_professions、device_name、brands、models、supplier_ids、"
+                        "statuses、价格上下限、exclude_blacklisted、"
+                        "exclude_delayed_suppliers、group_by、aggregations、sort_by、"
+                        "sort_order、page、page_size。group_by 仅允许 BRAND、BUILDING、"
+                        "SUPPLIER、DEVICE_NAME、STATUS、MONTH；aggregations 仅允许 COUNT、"
+                        "AVERAGE_UNIT_PRICE、MEDIAN_UNIT_PRICE、TOTAL_AMOUNT。"
                     ),
                 ),
                 ModelMessage(

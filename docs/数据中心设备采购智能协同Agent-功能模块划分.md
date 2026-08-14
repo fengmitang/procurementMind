@@ -1,7 +1,7 @@
 # 数据中心设备采购智能协同 Agent 功能模块文档
 
-> 版本：V1.1  
-> 日期：2026-08-04  
+> 版本：V1.2
+> 日期：2026-08-14
 > 关联文档：  
 > - 《数据中心设备采购智能协同 Agent 需求分析》  
 > - 《数据中心设备采购智能协同 Agent 技术方案》
@@ -19,6 +19,12 @@
 3. 审批辅助与异常调查。
 
 采购申请提交、审批流转、权限判断、金额计算、黑名单生效判断等确定性业务，继续由原有后端系统负责。
+
+### 当前实现状态说明
+
+- **已实现**：React Web、SSE、HITL、Context Assistant、LangGraph 六类路由、结构化模型角色、Qdrant 混合 RAG、单一 stdio MCP、Planner/Executor、Trace 和固定评测集。
+- **当前形态**：Router、Knowledge、Analysis、Review 是同一 Agent 服务内的逻辑角色；采购、产品、供应商、统计是一个 stdio MCP Server 内的 namespace，不是多个服务进程。
+- **未实现/后续**：独立动态 Skill 系统、HTTP MCP、Langfuse/OpenTelemetry、知识库管理页面、Skill 配置页面、评测结果页面和生产 frontend 容器。
 
 ---
 
@@ -45,7 +51,7 @@
     ├─ RAG 知识检索
     ├─ Planner / Executor
     ├─ Memory 与任务状态
-    ├─ Skills
+    ├─ 领域规则（独立 Skills 为后续）
     └─ 结构化输出
 
 四、工具接入层
@@ -252,14 +258,14 @@ Agent 生成草稿
 - Review 结果。
 - 最终答案。
 - 每一步耗时。
-- Token 和费用。
+- Provider 实际报告的 Token；费用仅在 Provider 有可靠字段时记录。
 
 ### 对应技术
 
 - Trace ID。
-- Langfuse，或 OpenTelemetry。
-- 自定义 Trace 表。
-- 前端时间线组件。
+- 当前自研 execution details / trace events。
+- 结构化日志与前端业务执行摘要。
+- Langfuse 或 OpenTelemetry 仅作为后续集中观测选项。
 
 ### 第一版要求
 
@@ -645,8 +651,8 @@ Review Agent 不能代替程序完成精确校验。
 
 ### 对应技术
 
-- LangChain Retriever。
-- Chroma，第一版。
+- 项目自研 KnowledgeRetriever。
+- Qdrant Dense + BM25 Sparse。
 - Embedding 模型。
 - BM25 或关键词搜索。
 - Rerank 模型。
@@ -749,7 +755,7 @@ Review Agent 不能代替程序完成精确校验。
 
 ---
 
-## 5.4 Skills 模块
+## 5.4 Skills 模块（后续可选，当前未实现）
 
 ### 功能
 
@@ -851,7 +857,7 @@ Review Agent 不能代替程序完成精确校验。
 
 ---
 
-## 6.2 采购数据 MCP Server
+## 6.2 采购数据 MCP namespace
 
 ### 功能
 
@@ -884,7 +890,7 @@ Review Agent 不能代替程序完成精确校验。
 
 ---
 
-## 6.3 产品数据 MCP Server
+## 6.3 产品数据 MCP namespace
 
 ### 功能
 
@@ -920,7 +926,7 @@ Review Agent 不能代替程序完成精确校验。
 
 ---
 
-## 6.4 供应商数据 MCP Server
+## 6.4 供应商数据 MCP namespace
 
 ### 功能
 
@@ -953,7 +959,7 @@ Review Agent 不能代替程序完成精确校验。
 
 ---
 
-## 6.5 统计分析 MCP Server
+## 6.5 统计分析 MCP namespace
 
 ### 功能
 
@@ -1162,9 +1168,9 @@ Review Agent 不能代替程序完成精确校验。
 
 ### 对应技术
 
-- LangChain 文档加载和切分。
+- 项目自研 MarkdownKnowledgeParser 与 Parent-Child 切分。
 - Embedding 模型。
-- Chroma。
+- Qdrant。
 - 异步任务，可选。
 
 ---
@@ -1278,10 +1284,9 @@ Review Agent 不能代替程序完成精确校验。
 
 ### 对应技术
 
-- Langfuse，推荐。
-- 或 OpenTelemetry。
-- 自定义 Trace 表。
-- 日志聚合。
+- 当前自研 execution details / trace events。
+- 结构化日志与阶段耗时。
+- Langfuse 或 OpenTelemetry 为后续可选集成。
 
 ### 指标
 
@@ -1389,9 +1394,9 @@ P0：
 - MCP Server 使用 stdio，不占独立端口。
 - MySQL。
 - Redis。
-- Chroma。
+- Qdrant。
 - Web 前端。
-- Langfuse，可选。
+- 集中观测平台（后续可选）。
 
 P1/P2 可选：
 
@@ -1483,7 +1488,7 @@ RAG            Planner / Executor
 
 - [ ] Redis 会话记忆。
 - [ ] 任务状态。
-- [ ] Skills 加载。
+- [P1] 独立 Skills 加载。
 - [ ] Pydantic 结构化输出。
 
 ### 工程能力
@@ -1508,7 +1513,7 @@ RAG            Planner / Executor
 - [ ] Human-in-the-loop。
 - [ ] 审批意见草稿。
 - [ ] 查询 DSL。
-- [ ] Langfuse。
+- [P1] Langfuse 或 OpenTelemetry 集成。
 - [ ] Token 和费用统计。
 - [ ] 超时、重试、熔断和 Fallback。
 - [ ] 执行过程查看页面。
@@ -1552,7 +1557,7 @@ RAG            Planner / Executor
 
 1. 整理采购流程、角色职责和规则文档。
 2. 完成文档导入和切分。
-3. 建立 Chroma 索引。
+3. 建立 Qdrant Dense + BM25 Sparse 索引。
 4. 完成 Knowledge Agent。
 5. 支持 RAG 与业务工具混合回答。
 6. 增加引用和 RAG 评测。
@@ -1599,7 +1604,7 @@ RAG            Planner / Executor
 2. Checkpoint 恢复。
 3. 并行工具调用。
 4. 超时、重试、熔断和 Fallback。
-5. Langfuse。
+5. 集中观测平台（后续可选）。
 6. 自动评测和回归测试。
 7. Docker Compose 一键部署。
 
@@ -1682,9 +1687,9 @@ RAG            Planner / Executor
 7. RAG 知识检索模块。
 8. Planner / Executor 模块。
 9. Memory 与 Checkpoint 模块。
-10. Skills 模块。
+10. 领域规则模块；独立 Skills 为后续扩展。
 11. MCP Client 管理模块。
-12. 采购、产品、供应商、统计 MCP Server。
+12. 单一 stdio MCP Server 内的采购、产品、供应商、统计 namespace。
 13. 受控查询 DSL 模块。
 14. 后端风险规则模块。
 15. Human-in-the-loop 模块。
@@ -1718,3 +1723,5 @@ V1.1 将用户入口和平台适配模块重新划分：
 - P0：完成独立可运行的 Web 版。
 - P1：完善正式 Web 登录、Session 和 BFF。
 - P2：按需增加飞书适配和远程 HTTP MCP。
+
+V1.2 同步当前代码：向量库为 Qdrant，Web 为 React + TypeScript + Vite 并已接入 SSE/HITL/Context Assistant；MCP 为单一 stdio 进程加 namespace 逻辑隔离；领域规则当前由 Role Prompt、Tool Contract、Graph 节点和 Backend 确定性规则承载，独立 Skills、Langfuse/OpenTelemetry 和管理页面均列为后续扩展。

@@ -1,8 +1,8 @@
 # 数据中心设备采购智能协同 Agent —— 前端设计文档
 
-版本：V0.1
-日期：2026-08-10
-状态：第一版前端设计基线
+版本：V0.2
+日期：2026-08-14
+状态：第一版设计与阶段 23 实现同步
 
 ---
 
@@ -21,6 +21,19 @@
 - 第一阶段验收标准。
 
 当前阶段仅完成 Web 前端。飞书、钉钉、微信等平台接入不在本阶段范围内，待 Web 端流程验证、联调和测试通过后再单独设计。
+
+### 1.1 V0.2 实现同步
+
+阶段 23 已在 V0.1 信息架构上完成以下增强，本文继续保持“设计文档”属性，不记录逐项开发日志：
+
+- 智能助手使用 Agent SSE Streaming，展示 thinking/analyzing 等业务化处理中状态、正文、Citation、Tool 摘要、确认请求和最终完成/错误事件。
+- Assistant Page 和 Context Assistant 均支持 `AbortController` 取消；失败后可重试，页面卸载会终止活动请求。
+- HITL 确认卡片覆盖确认、取消、过期和重复处理；正式写入仍由 Backend 状态机执行。
+- 采购详情引入 Context Assistant Drawer，通过受控 `ui_context` 传递 `page_type`、`requirement_id` 和可选 `user_draft`；权威事实由 Tool 回查。
+- 楼长、采购员、仓管岗位待办使用集中刷新后的 Badge；数量来自真实列表 `total`。
+- 供应商选择改为远程名称搜索；楼长供应商风险页使用楼宇范围正式 API。
+- ADMIN 使用独立菜单、工作台、员工管理和采购/供应商全局只读页面，不显示普通岗位写入口。
+- Backend field error 在前端统一映射为中文业务提示，业务状态、字段和枚举集中中文展示。
 
 ---
 
@@ -77,15 +90,15 @@
 
 ### 3.2 辅助技术
 
-可按实际开发需要增加：
+当前实际使用：
 
-- Zustand：轻量全局状态；
-- Axios 或 Fetch：HTTP 请求；
-- React Hook Form：复杂表单；
-- Zod：前端表单与 API 数据校验；
+- React Context：开发身份与角色状态；
+- Fetch + AbortController：JSON、SSE、超时与取消；
+- Ant Design Form：业务表单与字段校验；
 - react-markdown：Agent Markdown 回答渲染；
-- Lucide React / Ant Design Icons：图标；
-- ECharts：后续分析页面如确有必要再使用。
+- Ant Design Icons：图标。
+
+Zustand、Axios、React Hook Form、Zod、Lucide React 和 ECharts 当前均未引入；只有出现明确需求时再评估。
 
 第一版不引入 Next.js，不增加 SSR、Server Components 或额外 Node 后端。
 
@@ -1018,7 +1031,7 @@ Web 前端完成并完成联调、测试和流程验收后，再考虑：
 
 ## 27. 当前冻结决策
 
-截至 V0.1，以下内容作为第一版前端开发基线：
+截至 V0.2，以下内容作为第一版前端设计与实现基线：
 
 - React + TypeScript + Vite；
 - Ant Design + Ant Design X；
@@ -1029,6 +1042,9 @@ Web 前端完成并完成联调、测试和流程验收后，再考虑：
 - 新建采购申请不占 Sidebar；
 - 工作台突出待办、进行中、已完成和两个核心快捷入口；
 - 智能助手采用独立完整页面；
+- Agent 主对话与上下文助手均使用 SSE，并支持取消、重试和明确结束状态；
+- 采购详情可打开 Context Assistant，但页面草稿不作为后端事实；
+- ADMIN 使用独立信息架构，采购与供应商全局访问保持只读；
 - 普通用户不暴露 Agent 内部技术 Trace；
 - 前端优先接真实 Backend / Agent API；
 - Web 完成后再考虑外部办公平台接入。

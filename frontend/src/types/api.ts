@@ -174,6 +174,15 @@ export interface AgentStoredMessage {
   created_at: string
 }
 
+export interface AgentConversationState {
+  conversation_id: number
+  purchase_request_id: number | null
+  collected_data: Record<string, any>
+  missing_fields: string[]
+  pending_field: string | null
+  awaiting_confirmation: boolean
+}
+
 export interface PendingAction {
   action_id: string
   confirmation_token: string

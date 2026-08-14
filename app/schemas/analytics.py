@@ -25,6 +25,8 @@ class AnalyticsGroupBy(StrEnum):
     BUILDING = "BUILDING"
     SUPPLIER = "SUPPLIER"
     DEVICE_NAME = "DEVICE_NAME"
+    STATUS = "STATUS"
+    MONTH = "MONTH"
 
 
 class AnalyticsSortBy(StrEnum):

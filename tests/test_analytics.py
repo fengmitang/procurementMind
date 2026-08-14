@@ -103,6 +103,33 @@ async def test_controlled_purchase_query_matches_seeded_standard_answers() -> No
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("group_by", ["STATUS", "MONTH"])
+async def test_purchase_query_supports_status_and_month_groups(group_by: str) -> None:
+    path = "/api/v1/analytics/purchase-query"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await call(
+            client,
+            "POST",
+            path,
+            "test-user-05",
+            json={
+                "created_from": "2026-01-01",
+                "created_to": "2026-12-31",
+                "group_by": group_by,
+                "aggregations": ["COUNT", "TOTAL_AMOUNT"],
+                "page_size": 100,
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["effective_query"]["group_by"] == group_by
+    assert sum(group["metrics"]["count"] for group in data["groups"]) == data["summary"]["count"]
+    if group_by == "MONTH":
+        assert all(len(group["key"]) == 7 and group["key"][4] == "-" for group in data["groups"])
+
+
+@pytest.mark.asyncio
 async def test_purchase_query_can_scope_to_current_applicant_and_returns_card_fields() -> None:
     path = "/api/v1/analytics/purchase-query"
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

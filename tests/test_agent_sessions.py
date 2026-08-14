@@ -290,9 +290,18 @@ async def test_agent_backend_session_message_state_snapshot_and_completion() -> 
                 "POST",
                 snapshot_path,
                 "test-user-01",
-                json={"snapshot_reason": "USER_CONFIRMED"},
+                json={"snapshot_reason": "HITL_EXECUTED"},
             )
             assert snapshot.status_code == 200, snapshot.text
+
+            async with async_session_factory() as session:
+                confirmed_snapshot = await session.scalar(
+                    select(AgentSessionState).where(
+                        AgentSessionState.conversation_id == conversation_id
+                    )
+                )
+                assert confirmed_snapshot is not None
+                assert confirmed_snapshot.confirmed is True
 
             await delete_redis_state(conversation_id)
             restored = await call(

@@ -226,6 +226,33 @@ async def test_natural_purchase_intent_keeps_known_fields_and_asks_only_for_miss
 
 
 @pytest.mark.asyncio
+async def test_complete_natural_purchase_request_generates_persisted_create_draft_action() -> None:
+    restored = ConversationStateData(
+        conversation_id=1,
+        current_action="CHAT",
+        collected_data={"form_draft": {"building_id": 1, "building_name": "一号楼"}},
+    )
+    graph_request = applicant_request(
+        "我要采购3台浪潮服务器，用于替换故障设备"
+    ).model_copy(update={"restored_state": restored})
+
+    result = await ProcurementGraphService(settings()).run(graph_request)
+    saved = GraphMemoryMapper.to_backend_state(graph_request, result)
+
+    assert result.route is RouteType.FORM_PREFILL
+    assert result.form_missing_fields == []
+    assert result.pending_action is not None
+    assert result.pending_action.action_type.value == "CREATE_PURCHASE_DRAFT"
+    assert result.pending_action.draft["building_id"] == 1
+    assert result.pending_action.draft["device_name"] == "服务器"
+    assert result.pending_action.draft["quantity"] == 3
+    assert result.pending_action.draft["unit"] == "台"
+    assert result.pending_action.draft["application_reason"] == "替换故障设备"
+    assert saved.awaiting_confirmation is True
+    assert saved.collected_data["pending_action"]["action_id"] == result.pending_action.action_id
+
+
+@pytest.mark.asyncio
 async def test_configured_model_roles_are_used_for_route_and_compose() -> None:
     adapter = ScriptedModelAdapter(
         [

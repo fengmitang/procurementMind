@@ -12,6 +12,7 @@ from agent_app.investigation.schemas import (
 )
 from agent_app.mcp.client import MCPClientError
 from agent_app.mcp.schemas import MCPToolResponse
+from agent_app.rag.schemas import RetrievalFilters, RetrievalResult
 
 
 class InvestigationToolClient(Protocol):
@@ -20,6 +21,16 @@ class InvestigationToolClient(Protocol):
         name: str,
         arguments: dict | None = None,
     ) -> MCPToolResponse: ...
+
+
+class InvestigationKnowledgeRetriever(Protocol):
+    async def retrieve(
+        self,
+        query: str,
+        *,
+        filters: RetrievalFilters,
+        trace_id: str | None = None,
+    ) -> RetrievalResult: ...
 
 
 class RiskInvestigationService:
@@ -36,6 +47,11 @@ class RiskInvestigationService:
         self,
         requirement_id: int,
         client: InvestigationToolClient,
+        *,
+        knowledge_retriever: InvestigationKnowledgeRetriever | None = None,
+        allowed_roles: list[str] | None = None,
+        question: str | None = None,
+        trace_id: str | None = None,
     ) -> RiskInvestigationOutput:
         risk_evidence = await self._call(
             "risk_signals",
@@ -110,16 +126,16 @@ class RiskInvestigationService:
             )
             for evidence_id, kind, tool, arguments in skipped_follow_ups
         )
-        evidence.append(
-            InvestigationEvidence(
-                evidence_id="knowledge_rule",
-                kind=InvestigationEvidenceKind.KNOWLEDGE_RULE,
-                status=EvidenceStatus.UNAVAILABLE,
-                source="rag://procurement-rules",
-                code="KNOWLEDGE_MATERIALS_UNAVAILABLE",
-                message="真实采购制度材料尚未提供，未执行制度检索",
-            )
+        knowledge_evidence = await self._retrieve_knowledge(
+            requirement_id,
+            requirement,
+            risk_evidence,
+            knowledge_retriever=knowledge_retriever,
+            allowed_roles=allowed_roles or [],
+            question=question,
+            trace_id=trace_id,
         )
+        evidence.append(knowledge_evidence)
         items = self._build_summary(risk_evidence, evidence)
         review = self.reviewer.review(items, evidence)
         failed = [item for item in evidence if item.status is EvidenceStatus.FAILED]
@@ -137,7 +153,7 @@ class RiskInvestigationService:
             else "后端未命中确定性风险；这不代表审批结论。"
         )
         if unavailable:
-            answer += "真实制度材料尚未提供，制度依据标记为信息不足。"
+            answer += "未检索到可确认的适用制度依据，制度证据标记为信息不足。"
         if failed:
             answer += f"另有 {len(failed)} 项业务证据查询失败。"
         answer += "风险调查结果不替代人工审批结论。"
@@ -148,8 +164,114 @@ class RiskInvestigationService:
             evidence=evidence,
             review=review,
             complete=complete,
+            knowledge_evidence_available=(knowledge_evidence.status is EvidenceStatus.SUCCESS),
             warnings=warnings,
         )
+
+    @staticmethod
+    async def _retrieve_knowledge(
+        requirement_id: int,
+        requirement: InvestigationEvidence,
+        risk_evidence: InvestigationEvidence,
+        *,
+        knowledge_retriever: InvestigationKnowledgeRetriever | None,
+        allowed_roles: list[str],
+        question: str | None,
+        trace_id: str | None,
+    ) -> InvestigationEvidence:
+        source = "rag://procurement-rules"
+        if knowledge_retriever is None:
+            return InvestigationEvidence(
+                evidence_id="knowledge_rule",
+                kind=InvestigationEvidenceKind.KNOWLEDGE_RULE,
+                status=EvidenceStatus.UNAVAILABLE,
+                source=source,
+                code="RAG_NOT_CONFIGURED",
+                message="知识检索服务未配置，无法核对适用制度依据",
+            )
+        if not allowed_roles:
+            return InvestigationEvidence(
+                evidence_id="knowledge_rule",
+                kind=InvestigationEvidenceKind.KNOWLEDGE_RULE,
+                status=EvidenceStatus.UNAVAILABLE,
+                source=source,
+                code="KNOWLEDGE_ROLE_REQUIRED",
+                message="当前用户没有可用于知识权限过滤的角色",
+            )
+        query = RiskInvestigationService._knowledge_query(
+            requirement_id, requirement, risk_evidence, question
+        )
+        started = time.perf_counter()
+        try:
+            result = await knowledge_retriever.retrieve(
+                query,
+                filters=RetrievalFilters(
+                    allowed_roles=allowed_roles,
+                    chunk_types=["risk", "rule", "section", "faq"],
+                ),
+                trace_id=trace_id,
+            )
+        except Exception:
+            return InvestigationEvidence(
+                evidence_id="knowledge_rule",
+                kind=InvestigationEvidenceKind.KNOWLEDGE_RULE,
+                status=EvidenceStatus.UNAVAILABLE,
+                source=source,
+                code="RAG_RETRIEVAL_FAILURE",
+                message="制度知识检索失败，未使用未经确认的制度依据",
+                duration_ms=RiskInvestigationService._elapsed_ms(started),
+            )
+        if not result.answerable or not result.evidences:
+            return InvestigationEvidence(
+                evidence_id="knowledge_rule",
+                kind=InvestigationEvidenceKind.KNOWLEDGE_RULE,
+                status=EvidenceStatus.UNAVAILABLE,
+                source=source,
+                code="RAG_EVIDENCE_INSUFFICIENT",
+                message=result.abstention_reason or "未检索到可确认的适用制度依据",
+                trace_id=result.trace.trace_id,
+                duration_ms=RiskInvestigationService._elapsed_ms(started),
+            )
+        return InvestigationEvidence(
+            evidence_id="knowledge_rule",
+            kind=InvestigationEvidenceKind.KNOWLEDGE_RULE,
+            status=EvidenceStatus.SUCCESS,
+            source=source,
+            data={
+                "query": query,
+                "citations": [item.citation.model_dump(mode="json") for item in result.evidences],
+                "passages": [item.context_content for item in result.evidences],
+            },
+            trace_id=result.trace.trace_id,
+            duration_ms=RiskInvestigationService._elapsed_ms(started),
+        )
+
+    @staticmethod
+    def _knowledge_query(
+        requirement_id: int,
+        requirement: InvestigationEvidence,
+        risk_evidence: InvestigationEvidence,
+        question: str | None,
+    ) -> str:
+        parts = [question or f"采购申请 {requirement_id} 风险调查适用哪些制度和人工核查要求"]
+        if isinstance(requirement.data, dict):
+            applicant = requirement.data.get("applicant_fields")
+            if isinstance(applicant, dict):
+                for field in ("device_profession", "device_name"):
+                    value = applicant.get(field)
+                    if isinstance(value, str) and value:
+                        parts.append(value)
+        if isinstance(risk_evidence.data, dict):
+            risk_types = [
+                str(signal["risk_type"])
+                for signal in risk_evidence.data.get("signals", [])
+                if isinstance(signal, dict)
+                and signal.get("matched") is True
+                and signal.get("risk_type")
+            ]
+            parts.extend(risk_types)
+        parts.append("采购制度 风险核查 人工审批")
+        return " ".join(dict.fromkeys(parts))
 
     @staticmethod
     def _follow_up_calls(

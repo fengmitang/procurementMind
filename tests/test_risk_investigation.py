@@ -16,7 +16,9 @@ from agent_app.investigation.schemas import (
 )
 from agent_app.investigation.service import RiskInvestigationService
 from agent_app.mcp.schemas import MCPToolResponse
-from agent_app.schemas.backend import BackendIdentity, CurrentUserData
+from agent_app.rag.schemas import RetrievalFilters, RetrievalResult
+from agent_app.schemas.backend import BackendIdentity, CurrentUserData, UserRoleData
+from tests.test_agent_graph_rag import retrieval_result
 
 
 def ok(name: str, data: dict) -> MCPToolResponse:
@@ -121,6 +123,40 @@ class FakeClient:
         return responses[name]
 
 
+class FakeKnowledgeRetriever:
+    def __init__(self, result: RetrievalResult | Exception) -> None:
+        self.result = result
+        self.calls: list[tuple[str, RetrievalFilters, str | None]] = []
+
+    async def retrieve(
+        self,
+        query: str,
+        *,
+        filters: RetrievalFilters,
+        trace_id: str | None = None,
+    ) -> RetrievalResult:
+        self.calls.append((query, filters, trace_id))
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+def fake_knowledge_result(*, answerable: bool = True) -> RetrievalResult:
+    filters = RetrievalFilters(allowed_roles=["BUILDING_MANAGER"])
+    result = retrieval_result("价格风险制度", filters, "trace-risk-rag")
+    if answerable:
+        return result
+    return result.model_copy(
+        update={
+            "answerable": False,
+            "evidences": [],
+            "citations": [],
+            "context": "",
+            "abstention_reason": "未找到适用制度",
+        }
+    )
+
+
 @pytest.mark.asyncio
 async def test_risk_signal_runs_first_then_follow_ups_run_in_parallel() -> None:
     client = FakeClient()
@@ -141,7 +177,62 @@ async def test_risk_signal_runs_first_then_follow_ups_run_in_parallel() -> None:
     assert result.review.passed is True
     assert result.complete is False
     assert any(item.status is EvidenceStatus.UNAVAILABLE for item in result.evidence)
-    assert "制度依据标记为信息不足" in result.answer
+    assert "制度证据标记为信息不足" in result.answer
+
+
+@pytest.mark.asyncio
+async def test_all_business_and_knowledge_evidence_make_investigation_complete() -> None:
+    retriever = FakeKnowledgeRetriever(fake_knowledge_result())
+
+    result = await RiskInvestigationService().run(
+        91009,
+        FakeClient(),
+        knowledge_retriever=retriever,
+        allowed_roles=["BUILDING_MANAGER"],
+        question="调查采购申请 91009 是否存在价格异常风险",
+        trace_id="trace-risk",
+    )
+
+    knowledge = next(
+        item for item in result.evidence if item.kind is InvestigationEvidenceKind.KNOWLEDGE_RULE
+    )
+    assert knowledge.status is EvidenceStatus.SUCCESS
+    assert knowledge.data["citations"]
+    assert result.knowledge_evidence_available is True
+    assert result.summary_items[0].information_complete is True
+    assert result.complete is True
+    assert result.warnings == []
+    assert retriever.calls[0][1].allowed_roles == ["BUILDING_MANAGER"]
+    assert "不替代人工审批结论" in result.answer
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("retrieval", "expected_code"),
+    [
+        (fake_knowledge_result(answerable=False), "RAG_EVIDENCE_INSUFFICIENT"),
+        (RuntimeError("rag down"), "RAG_RETRIEVAL_FAILURE"),
+    ],
+)
+async def test_missing_or_failed_knowledge_stays_unavailable(
+    retrieval: RetrievalResult | Exception,
+    expected_code: str,
+) -> None:
+    result = await RiskInvestigationService().run(
+        91009,
+        FakeClient(),
+        knowledge_retriever=FakeKnowledgeRetriever(retrieval),
+        allowed_roles=["BUILDING_MANAGER"],
+        trace_id="trace-risk",
+    )
+
+    knowledge = next(
+        item for item in result.evidence if item.kind is InvestigationEvidenceKind.KNOWLEDGE_RULE
+    )
+    assert knowledge.status is EvidenceStatus.UNAVAILABLE
+    assert knowledge.code == expected_code
+    assert result.knowledge_evidence_available is False
+    assert result.complete is False
 
 
 @pytest.mark.asyncio
@@ -237,6 +328,7 @@ def test_program_reviewer_detects_numeric_tampering_and_approval_decision() -> N
 @pytest.mark.asyncio
 async def test_risk_investigation_graph_returns_structured_evidence() -> None:
     client = FakeClient()
+    retriever = FakeKnowledgeRetriever(fake_knowledge_result())
 
     @asynccontextmanager
     async def factory(*_args):
@@ -251,7 +343,11 @@ async def test_risk_investigation_graph_returns_structured_evidence() -> None:
         platform_type="TEST_PLATFORM",
         platform_user_id="user-1",
     )
-    result = await ProcurementGraphService(settings, mcp_client_factory=factory).run(
+    result = await ProcurementGraphService(
+        settings,
+        mcp_client_factory=factory,
+        knowledge_retriever=retriever,
+    ).run(
         GraphRunRequest(
             task_id=uuid4(),
             trace_id="trace-risk",
@@ -265,7 +361,13 @@ async def test_risk_investigation_graph_returns_structured_evidence() -> None:
                 status="ACTIVE",
                 platform_type=identity.platform_type,
                 platform_user_id=identity.platform_user_id,
-                roles=[],
+                roles=[
+                    UserRoleData(
+                        role_id=1,
+                        role_code="BUILDING_MANAGER",
+                        role_name="楼长",
+                    )
+                ],
                 buildings=[],
             ),
             message="调查采购申请 91009 的审批风险",
@@ -275,6 +377,8 @@ async def test_risk_investigation_graph_returns_structured_evidence() -> None:
     assert result.route is RouteType.RISK_INVESTIGATION
     assert result.risk_investigation is not None
     assert result.risk_investigation.review.passed is True
+    assert result.risk_investigation.complete is True
+    assert result.risk_investigation.knowledge_evidence_available is True
     assert result.tool_call_count == 5
     assert len(result.evidence) == 6
     assert any(item.name == "risk_investigation" for item in result.trace_events)

@@ -186,16 +186,31 @@ class HITLService:
         )
         collected_data = dict(state.collected_data)
         collected_data.pop("pending_action", None)
+        purchase_request_id = state.purchase_request_id
+        missing_fields = state.missing_fields
+        pending_field = state.pending_field
+        if (
+            status is ActionResolutionStatus.EXECUTED
+            and pending.action_type is HITLActionType.CREATE_PURCHASE_DRAFT
+            and result is not None
+        ):
+            created_id = result.get("requirement_id")
+            if isinstance(created_id, int) and created_id > 0:
+                purchase_request_id = created_id
+            collected_data.pop("form_draft", None)
+            collected_data.pop("form_missing_fields", None)
+            missing_fields = []
+            pending_field = None
         collected_data["last_resolved_action"] = resolution.model_dump(mode="json")
         await self.backend.save_conversation_state(
             identity,
             state.conversation_id,
             ConversationStatePayload(
-                purchase_request_id=state.purchase_request_id,
+                purchase_request_id=purchase_request_id,
                 current_action="CHAT",
                 collected_data=collected_data,
-                missing_fields=state.missing_fields,
-                pending_field=state.pending_field,
+                missing_fields=missing_fields,
+                pending_field=pending_field,
                 awaiting_confirmation=False,
                 recent_messages=state.recent_messages,
                 last_recommendations=state.last_recommendations,

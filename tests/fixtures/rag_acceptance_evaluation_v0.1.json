@@ -1,0 +1,92 @@
+[
+  {
+    "case_id": "rag-rejection-direct",
+    "category": "rejection",
+    "query": "采购申请被驳回后应该怎么处理？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["4bf46f2c-f2d5-56a9-b306-b91f29738ade", "cc18dc0e-ed01-5b77-b974-c435071eea8d", "aaa98cae-1388-56e0-9dec-3d46d0f9b505"]
+  },
+  {
+    "case_id": "rag-rejection-colloquial",
+    "category": "rejection",
+    "query": "单子被楼长打回来以后怎么办？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["4bf46f2c-f2d5-56a9-b306-b91f29738ade", "cc18dc0e-ed01-5b77-b974-c435071eea8d", "aaa98cae-1388-56e0-9dec-3d46d0f9b505"]
+  },
+  {
+    "case_id": "rag-device-name",
+    "category": "form-rule",
+    "query": "买设备时品名应该怎么填写？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["2b6c1463-5e97-55d7-88ad-34609a33c920"]
+  },
+  {
+    "case_id": "rag-device-name-synonym",
+    "category": "form-rule",
+    "query": "采购申请里的设备名称有什么填写规范？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["2b6c1463-5e97-55d7-88ad-34609a33c920"]
+  },
+  {
+    "case_id": "rag-quantity",
+    "category": "form-rule",
+    "query": "采购数量字段应当怎样填写？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["af74cb36-ce47-5675-8a66-34e18ce0ba81"]
+  },
+  {
+    "case_id": "rag-save-draft",
+    "category": "draft",
+    "query": "采购申请没填完可以先保存草稿吗？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["5c797e0f-ff73-5b6b-82ab-291ee7ad8a4d"]
+  },
+  {
+    "case_id": "rag-auto-approval",
+    "category": "permission",
+    "query": "智能助手能否替用户自动审批？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["31d32b19-7b64-540c-a2c3-b89cb4341af3", "a066a0e9-e3e7-5036-a8fd-fa8d089cd13b"]
+  },
+  {
+    "case_id": "rag-auto-approval-colloquial",
+    "category": "permission",
+    "query": "助手可以不经过我确认就替我通过申请吗？",
+    "roles": ["APPLICANT"],
+    "expected_route": "KNOWLEDGE",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["31d32b19-7b64-540c-a2c3-b89cb4341af3", "a066a0e9-e3e7-5036-a8fd-fa8d089cd13b"]
+  },
+  {
+    "case_id": "rag-blacklist-types",
+    "category": "risk-rule",
+    "query": "永久黑名单和限时黑名单有什么区别？",
+    "roles": ["PURCHASER"],
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["b0b6fb6b-d33a-5861-9477-c6333fbb6a25", "4a2fdaa3-ace0-51ef-99d7-05f60a0cbe80", "81a99317-3456-5263-a664-c55886ca82d9"]
+  },
+  {
+    "case_id": "rag-blacklist-register",
+    "category": "risk-rule",
+    "query": "谁有权限登记供应商黑名单？",
+    "roles": ["APPLICANT"],
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_retrieval": true,
+    "relevant_parent_ids": ["13c6d8bb-3fca-5548-89ac-1074eb3731a2"]
+  }
+]

@@ -1,0 +1,182 @@
+[
+  {
+    "case_id": "knowledge-rejected-request",
+    "category": "KNOWLEDGE",
+    "question": "采购申请被驳回后应该怎么处理？",
+    "expected_route": "KNOWLEDGE",
+    "expected_tool": null
+  },
+  {
+    "case_id": "knowledge-required-fields",
+    "category": "KNOWLEDGE",
+    "question": "提交采购申请前需要检查哪些必填信息？",
+    "expected_route": "KNOWLEDGE",
+    "expected_tool": null
+  },
+  {
+    "case_id": "knowledge-manager-review",
+    "category": "KNOWLEDGE",
+    "question": "楼长审批采购申请时需要关注哪些内容？",
+    "expected_route": "KNOWLEDGE",
+    "expected_tool": null
+  },
+  {
+    "case_id": "knowledge-contract-rule",
+    "category": "KNOWLEDGE",
+    "question": "采购流程中合同信息应当如何填写？",
+    "expected_route": "KNOWLEDGE",
+    "expected_tool": null
+  },
+  {
+    "case_id": "knowledge-warehouse-acceptance",
+    "category": "KNOWLEDGE",
+    "question": "设备采购入库验收有哪些要求？",
+    "expected_route": "KNOWLEDGE",
+    "expected_tool": null
+  },
+  {
+    "case_id": "realtime-status",
+    "category": "REALTIME_BUSINESS",
+    "question": "采购申请 {{requirement_id}} 当前状态是什么？",
+    "expected_route": "REALTIME_BUSINESS",
+    "expected_tool": "get_purchase_request"
+  },
+  {
+    "case_id": "realtime-handler",
+    "category": "REALTIME_BUSINESS",
+    "question": "采购申请 {{requirement_id}} 当前处理人是谁？",
+    "expected_route": "REALTIME_BUSINESS",
+    "expected_tool": "get_purchase_request"
+  },
+  {
+    "case_id": "realtime-progress",
+    "category": "REALTIME_BUSINESS",
+    "question": "采购申请 {{requirement_id}} 现在到哪一步了？",
+    "expected_route": "REALTIME_BUSINESS",
+    "expected_tool": "get_purchase_request"
+  },
+  {
+    "case_id": "realtime-detail",
+    "category": "REALTIME_BUSINESS",
+    "question": "查询采购申请 {{requirement_id}} 的设备、数量和当前状态。",
+    "expected_route": "REALTIME_BUSINESS",
+    "expected_tool": "get_purchase_request"
+  },
+  {
+    "case_id": "realtime-latest-status",
+    "category": "REALTIME_BUSINESS",
+    "question": "帮我查看采购申请 {{requirement_id}} 的最新进度。",
+    "expected_route": "REALTIME_BUSINESS",
+    "expected_tool": "get_purchase_request"
+  },
+  {
+    "case_id": "complex-count-by-status",
+    "category": "COMPLEX_QUERY",
+    "question": "统计我可见的采购申请数量，并按状态汇总。",
+    "expected_route": "COMPLEX_QUERY",
+    "expected_tool": "query_purchase_analytics"
+  },
+  {
+    "case_id": "complex-count-by-building",
+    "category": "COMPLEX_QUERY",
+    "question": "分析各楼宇的采购申请数量并进行对比。",
+    "expected_route": "COMPLEX_QUERY",
+    "expected_tool": "query_purchase_analytics"
+  },
+  {
+    "case_id": "complex-total-amount",
+    "category": "COMPLEX_QUERY",
+    "question": "统计已完成采购申请的总金额。",
+    "expected_route": "COMPLEX_QUERY",
+    "expected_tool": "query_purchase_analytics"
+  },
+  {
+    "case_id": "complex-device-ranking",
+    "category": "COMPLEX_QUERY",
+    "question": "按设备名称统计采购数量并给出排名。",
+    "expected_route": "COMPLEX_QUERY",
+    "expected_tool": "query_purchase_analytics"
+  },
+  {
+    "case_id": "complex-monthly-trend",
+    "category": "COMPLEX_QUERY",
+    "question": "分析今年采购申请数量的月度趋势。",
+    "expected_route": "COMPLEX_QUERY",
+    "expected_tool": "query_purchase_analytics"
+  },
+  {
+    "case_id": "risk-overall",
+    "category": "RISK_INVESTIGATION",
+    "question": "调查采购申请 {{requirement_id}} 是否存在综合风险。",
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_tool": "get_requirement_risk_signals",
+    "platform_user_id": "test-user-02"
+  },
+  {
+    "case_id": "risk-price",
+    "category": "RISK_INVESTIGATION",
+    "question": "调查采购申请 {{requirement_id}} 是否存在价格异常风险。",
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_tool": "get_requirement_risk_signals",
+    "platform_user_id": "test-user-02"
+  },
+  {
+    "case_id": "risk-supplier",
+    "category": "RISK_INVESTIGATION",
+    "question": "调查采购申请 {{requirement_id}} 的供应商黑名单风险。",
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_tool": "get_requirement_risk_signals",
+    "platform_user_id": "test-user-02"
+  },
+  {
+    "case_id": "risk-quantity",
+    "category": "RISK_INVESTIGATION",
+    "question": "调查采购申请 {{requirement_id}} 是否存在数量异常。",
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_tool": "get_requirement_risk_signals",
+    "platform_user_id": "test-user-02"
+  },
+  {
+    "case_id": "risk-similar-cases",
+    "category": "RISK_INVESTIGATION",
+    "question": "调查采购申请 {{requirement_id}} 与历史相似案例相比是否异常。",
+    "expected_route": "RISK_INVESTIGATION",
+    "expected_tool": "get_requirement_risk_signals",
+    "platform_user_id": "test-user-02"
+  },
+  {
+    "case_id": "form-server",
+    "category": "FORM_PREFILL",
+    "question": "我要采购3台浪潮服务器，用于业务系统扩容。",
+    "expected_route": "FORM_PREFILL",
+    "expected_tool": null
+  },
+  {
+    "case_id": "form-switch",
+    "category": "FORM_PREFILL",
+    "question": "帮我生成5台华为交换机的采购申请草稿，用于网络扩容。",
+    "expected_route": "FORM_PREFILL",
+    "expected_tool": null
+  },
+  {
+    "case_id": "form-ups",
+    "category": "FORM_PREFILL",
+    "question": "需要采购2套UPS，用于机房备用供电。",
+    "expected_route": "FORM_PREFILL",
+    "expected_tool": null
+  },
+  {
+    "case_id": "form-firewall",
+    "category": "FORM_PREFILL",
+    "question": "申请采购2台防火墙，原因是加强办公网络安全。",
+    "expected_route": "FORM_PREFILL",
+    "expected_tool": null
+  },
+  {
+    "case_id": "form-incomplete",
+    "category": "FORM_PREFILL",
+    "question": "我想采购一批打印机，先帮我生成采购申请草稿。",
+    "expected_route": "FORM_PREFILL",
+    "expected_tool": null
+  }
+]

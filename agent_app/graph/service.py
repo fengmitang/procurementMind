@@ -10,6 +10,7 @@ from typing import Any, Protocol, cast
 from langgraph.graph import END, START, StateGraph
 
 from agent_app.analysis.executor import AnalysisExecutor
+from agent_app.analysis.planner import DeterministicAnalysisPlanner
 from agent_app.analysis.schemas import AnalysisOutput
 from agent_app.analysis.service import AnalysisAgentService
 from agent_app.core.config import AgentSettings
@@ -736,7 +737,19 @@ class ProcurementGraphService:
                     client,
                     self.mcp_circuit_breaker,
                 )
-                output = await self.risk_investigation.run(requirement_id, protected_client)
+                roles = [
+                    item["role_code"]
+                    for item in state["current_user"].get("roles", [])
+                    if isinstance(item, dict) and isinstance(item.get("role_code"), str)
+                ]
+                output = await self.risk_investigation.run(
+                    requirement_id,
+                    protected_client,
+                    knowledge_retriever=self.knowledge_retriever,
+                    allowed_roles=roles,
+                    question=state["message"],
+                    trace_id=state["trace_id"],
+                )
         except Exception:
             return self._analysis_failure(
                 state,
@@ -997,7 +1010,9 @@ class ProcurementGraphService:
             "供应商风险",
             "历史采购情况",
         )
-        return not any(intent in normalized for intent in single_tool_intents)
+        if any(intent in normalized for intent in single_tool_intents):
+            return False
+        return not DeterministicAnalysisPlanner.supports_single_tool_query(message)
 
     async def _realtime_query_node(self, state: GraphState) -> dict[str, Any]:
         await self._emit_stream("querying_business_data", {"message": "正在查询采购业务记录"})

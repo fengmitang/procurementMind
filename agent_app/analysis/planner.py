@@ -10,6 +10,10 @@ from agent_app.analysis.schemas import (
     AnalysisStepResult,
     AnalysisToolName,
 )
+from agent_app.domain.device_catalog import (
+    build_device_classification_context,
+    get_device_catalog,
+)
 from agent_app.models.protocols import ModelMessage, ModelPurpose, StructuredModelRequest
 from agent_app.models.runner import StructuredModelRunner
 from agent_app.schemas.analytics import (
@@ -17,6 +21,7 @@ from agent_app.schemas.analytics import (
     AnalyticsGroupBy,
     AnalyticsQueryInput,
 )
+from app.schemas.procurement import DEVICE_PROFESSIONS
 
 
 class AnalysisPlanner(Protocol):
@@ -38,17 +43,6 @@ class DeterministicAnalysisPlanner:
 
     _follow_up_markers = ("再", "另外", "并且", "改为", "只看", "排除", "还是", "那么")
     _device_names = ("服务器", "交换机", "路由器", "存储", "防火墙", "机柜", "UPS")
-    _device_professions = (
-        "电气",
-        "暖通",
-        "弱电",
-        "机房环境",
-        "工器具",
-        "算力服务器",
-        "IDC网络",
-        "其他",
-    )
-
     @staticmethod
     def supports_single_tool_query(message: str) -> bool:
         """Return whether the controlled query DSL can express this in one call."""
@@ -207,15 +201,61 @@ class DeterministicAnalysisPlanner:
         supplier_ids = [int(value) for value in re.findall(r"供应商\s*(\d+)", message)]
         if supplier_ids:
             values["supplier_ids"] = list(dict.fromkeys(supplier_ids))
-        profession = next(
-            (item for item in self._device_professions if item.lower() in message.lower()),
-            None,
+        typical_matches = get_device_catalog().typical_matches(message)
+        profession_is_explicit = any(
+            marker in message for marker in ("设备类型", "设备专业", "专业分类")
+        )
+        canonical_matches = [
+            profession
+            for profession in DEVICE_PROFESSIONS
+            if profession.casefold() in message.casefold()
+        ]
+        matched_profession = (
+            canonical_matches[0]
+            if profession_is_explicit and len(canonical_matches) == 1
+            else next(iter(typical_matches))
+            if len(typical_matches) == 1
+            else None
+        )
+        matched_terms = typical_matches.get(matched_profession, ()) if matched_profession else ()
+        only_bare_device_name = bool(
+            matched_profession in self._device_names
+            and matched_terms
+            and all(term.casefold() == matched_profession.casefold() for term in matched_terms)
+        )
+        profession = (
+            matched_profession
+            if matched_profession is not None
+            and (not only_bare_device_name or profession_is_explicit)
+            else None
         )
         if profession:
             values["device_professions"] = [profession]
         remaining = message.replace(profession, "") if profession else message
+        matched_query_terms = (
+            typical_matches.get(profession, ()) if profession is not None else ()
+        )
+        only_explicit_category_name = bool(
+            profession_is_explicit
+            and profession is not None
+            and matched_query_terms
+            and all(term.casefold() == profession.casefold() for term in matched_query_terms)
+        )
+        if matched_query_terms and not only_explicit_category_name:
+            values["device_name"] = max(matched_query_terms, key=len)
+        elif not profession:
+            ambiguous_matches = get_device_catalog().ambiguous_matches(message)
+            if ambiguous_matches:
+                values["device_name"] = max(
+                    (
+                        term
+                        for terms in ambiguous_matches.values()
+                        for term in terms
+                    ),
+                    key=len,
+                )
         for device_name in self._device_names:
-            if device_name.lower() in remaining.lower():
+            if "device_name" not in values and device_name.lower() in remaining.lower():
                 values["device_name"] = device_name
                 break
         brand = re.search(
@@ -281,6 +321,8 @@ class DeterministicAnalysisPlanner:
         explicit = current.model_fields_set
         for field in explicit:
             base[field] = getattr(current, field)
+        if {"device_name", "device_professions"} & explicit:
+            base["device_names"] = []
         if "取消排除黑名单" in message:
             base["exclude_blacklisted"] = False
         if "取消排除延期" in message:
@@ -321,6 +363,7 @@ class ModelBackedAnalysisPlanner:
         previous_query: AnalyticsQueryInput | None = None,
     ) -> AnalysisPlan:
         context = previous_query.model_dump(mode="json") if previous_query else None
+        catalog_context = build_device_classification_context()
         request = StructuredModelRequest(
             purpose=ModelPurpose.ANALYSIS_PLAN,
             trace_id=self.trace_id,
@@ -335,11 +378,15 @@ class ModelBackedAnalysisPlanner:
                         "条件必须直接放在 query 内，禁止生成 filters。query 允许的主要字段为"
                         "created_from、created_to、created_by_me、building_ids、"
                         "device_professions、device_name、brands、models、supplier_ids、"
-                        "statuses、价格上下限、exclude_blacklisted、"
+                        "statuses。device_professions 必须使用统一设备术语目录中的正式类别；"
+                        "typical_terms 可作为强提示，ambiguous_terms 单独出现时不得直接确定类别。"
+                        "价格上下限、exclude_blacklisted、"
                         "exclude_delayed_suppliers、group_by、aggregations、sort_by、"
                         "sort_order、page、page_size。group_by 仅允许 BRAND、BUILDING、"
                         "SUPPLIER、DEVICE_NAME、STATUS、MONTH；aggregations 仅允许 COUNT、"
-                        "AVERAGE_UNIT_PRICE、MEDIAN_UNIT_PRICE、TOTAL_AMOUNT。"
+                        "AVERAGE_UNIT_PRICE、MEDIAN_UNIT_PRICE、TOTAL_AMOUNT。\n\n"
+                        "device_names 是系统语义检索生成的历史名称候选，Planner 禁止生成。"
+                        f"设备术语目录：\n{catalog_context}"
                     ),
                 ),
                 ModelMessage(

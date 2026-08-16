@@ -1,12 +1,12 @@
 [
   {
     "id": "aggregate-by-brand",
-    "message": "统计 2026-08-01 到 2026-08-05 算力服务器各品牌采购数量、平均单价、中位价和总金额",
+    "message": "统计 2026-08-01 到 2026-08-05 设备类型为服务器的各品牌采购数量、平均单价、中位价和总金额",
     "expected_tool": "query_purchase_analytics",
     "expected_query": {
       "created_from": "2026-08-01",
       "created_to": "2026-08-05",
-      "device_professions": ["算力服务器"],
+      "device_professions": ["服务器"],
       "group_by": "BRAND",
       "aggregations": ["COUNT", "AVERAGE_UNIT_PRICE", "MEDIAN_UNIT_PRICE", "TOTAL_AMOUNT"]
     }

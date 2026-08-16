@@ -137,7 +137,7 @@ async def test_complete_procurement_flow_with_rejection_and_resubmission() -> No
                 json={
                     "expected_version": 0,
                     "fields": {
-                        "device_profession": "算力服务器",
+                        "device_profession": "服务器",
                         "device_name": "TEST-E2E交换机",
                         "brand": "TEST-BRAND",
                         "model": "TEST-MODEL",

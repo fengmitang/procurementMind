@@ -2,6 +2,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.procurement import DeviceType
+
 
 class ModelRoute(StrEnum):
     KNOWLEDGE = "KNOWLEDGE"
@@ -42,6 +44,53 @@ class QueryRewriteOutput(BaseModel):
     rewritten_query: str = Field(min_length=1, max_length=2000)
     changed: bool
     preserved_entities: list[str] = Field(default_factory=list, max_length=20)
+
+
+class DeviceClassificationStatus(StrEnum):
+    CONFIDENT = "CONFIDENT"
+    AMBIGUOUS = "AMBIGUOUS"
+    UNKNOWN = "UNKNOWN"
+
+
+class FormClassificationData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    classification_status: DeviceClassificationStatus
+    candidate_professions: list[DeviceType] = Field(default_factory=list, max_length=3)
+
+
+class FormExtractOutput(FormClassificationData):
+    model_config = ConfigDict(extra="forbid")
+
+    device_name: str | None = Field(default=None, min_length=1, max_length=200)
+    device_profession: DeviceType | None = None
+    brand: str | None = Field(default=None, min_length=1, max_length=100)
+    model: str | None = Field(default=None, min_length=1, max_length=150)
+    quantity: float | None = Field(default=None, gt=0)
+    unit: str | None = Field(default=None, min_length=1, max_length=30)
+    application_reason: str | None = Field(default=None, min_length=1)
+    applicant_remark: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def classification_must_be_consistent(self) -> "FormExtractOutput":
+        if self.classification_status is DeviceClassificationStatus.CONFIDENT:
+            if self.device_profession is None:
+                raise ValueError("CONFIDENT 必须给出合法 device_profession")
+        elif self.device_profession is not None:
+            raise ValueError("AMBIGUOUS/UNKNOWN 不得写入 device_profession")
+        if self.classification_status is DeviceClassificationStatus.AMBIGUOUS:
+            if not self.candidate_professions:
+                raise ValueError("AMBIGUOUS 必须给出至少一个候选类型")
+        elif self.classification_status is DeviceClassificationStatus.UNKNOWN:
+            if self.candidate_professions:
+                raise ValueError("UNKNOWN 不得给出候选类型")
+        return self
+
+    def classification(self) -> FormClassificationData:
+        return FormClassificationData(
+            classification_status=self.classification_status,
+            candidate_professions=self.candidate_professions,
+        )
 
 
 class ComposeCitation(BaseModel):

@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
+from app.schemas.procurement import DeviceType
+
 
 class BackendIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -57,7 +59,7 @@ class CurrentHandlerData(BaseModel):
 
 
 class ApplicantFieldsData(BaseModel):
-    device_profession: str | None
+    device_profession: DeviceType | None
     device_name: str | None
     brand: str | None
     model: str | None

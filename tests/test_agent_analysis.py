@@ -13,6 +13,11 @@ from agent_app.analysis.planner import DeterministicAnalysisPlanner
 from agent_app.analysis.schemas import AnalysisPlan, AnalysisPlanStep, AnalysisToolName
 from agent_app.analysis.service import AnalysisAgentService
 from agent_app.core.config import AgentSettings
+from agent_app.device_terms.schemas import (
+    DeviceTermCandidate,
+    DeviceTermLookupResult,
+    DeviceTermLookupStatus,
+)
 from agent_app.graph.memory import GraphMemoryMapper
 from agent_app.graph.schemas import GraphRunRequest, RouteType
 from agent_app.graph.service import ProcurementGraphService
@@ -21,18 +26,157 @@ from agent_app.models.fake import ScriptedModelAdapter
 from agent_app.models.protocols import ModelPurpose, StructuredModelResponse
 from agent_app.models.roles import StructuredModelRoles
 from agent_app.models.runner import StructuredModelRunError, StructuredModelRunner
-from agent_app.schemas.analytics import AnalyticsAggregation, AnalyticsGroupBy
+from agent_app.schemas.analytics import (
+    AnalyticsAggregation,
+    AnalyticsGroupBy,
+    AnalyticsQueryInput,
+)
 from agent_app.schemas.backend import (
     BackendIdentity,
     ConversationStateData,
     CurrentUserData,
 )
+from app.schemas.procurement import DEVICE_PROFESSIONS
 
 EVALUATION_CASES = json.loads(
     (Path(__file__).parent / "fixtures" / "analysis_evaluation_v0.1.json").read_text(
         encoding="utf-8"
     )
 )
+
+
+@pytest.mark.parametrize("device_profession", DEVICE_PROFESSIONS)
+def test_agent_analytics_schema_accepts_formal_device_professions(
+    device_profession: str,
+) -> None:
+    query = AnalyticsQueryInput(device_professions=[device_profession])
+
+    assert query.device_professions == [device_profession]
+
+
+def test_agent_analytics_schema_rejects_unknown_device_profession() -> None:
+    with pytest.raises(ValidationError):
+        AnalyticsQueryInput(device_professions=["未定义设备类型"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("device_profession", DEVICE_PROFESSIONS)
+async def test_deterministic_planner_uses_formal_device_professions(
+    device_profession: str,
+) -> None:
+    plan = await DeterministicAnalysisPlanner().create_plan(
+        f"统计设备类型为{device_profession}的采购数量"
+    )
+
+    assert plan.query_context is not None
+    assert plan.query_context.device_professions == [device_profession]
+    assert plan.query_context.device_name is None
+
+
+@pytest.mark.asyncio
+async def test_deterministic_planner_uses_catalog_typical_terms() -> None:
+    plan = await DeterministicAnalysisPlanner().create_plan(
+        "看看以前UPS功率模块的采购情况"
+    )
+
+    assert plan.query_context is not None
+    assert plan.query_context.device_professions == ["UPS"]
+    assert plan.query_context.device_name == "UPS功率模块"
+
+
+@pytest.mark.asyncio
+async def test_deterministic_planner_does_not_map_ambiguous_term_alone() -> None:
+    plan = await DeterministicAnalysisPlanner().create_plan(
+        "看看以前功率模块的采购情况"
+    )
+
+    assert plan.query_context is not None
+    assert plan.query_context.device_professions == []
+    assert plan.query_context.device_name == "功率模块"
+
+
+class FakeDeviceTermSearch:
+    top_k = 5
+
+    def __init__(self, result: DeviceTermLookupResult) -> None:
+        self.result = result
+        self.calls: list[tuple[str, str]] = []
+
+    async def lookup(self, query_term, device_profession):
+        self.calls.append((query_term, device_profession))
+        return self.result
+
+
+@pytest.mark.asyncio
+async def test_analysis_service_adds_semantic_candidates_before_backend_tool() -> None:
+    lookup = DeviceTermLookupResult(
+        status=DeviceTermLookupStatus.SEMANTIC,
+        query_term="UPS功率模块",
+        device_profession="UPS",
+        semantic_used=True,
+        candidates=[
+            DeviceTermCandidate(
+                device_name="UPS模块", device_profession="UPS", score=0.91
+            ),
+            DeviceTermCandidate(
+                device_name="模块化UPS功率单元", device_profession="UPS", score=0.87
+            ),
+        ],
+        top_k=5,
+    )
+    search = FakeDeviceTermSearch(lookup)
+    client = FakeAnalysisClient()
+
+    output = await AnalysisAgentService(device_term_search=search).run(
+        "看看以前UPS功率模块的采购情况", client
+    )
+
+    query = client.calls[0][1]["query"]
+    assert query["device_professions"] == ["UPS"]
+    assert query["device_name"] == "UPS功率模块"
+    assert query["device_names"] == ["UPS模块", "模块化UPS功率单元"]
+    assert output.device_term_lookup == lookup
+    assert search.calls == [("UPS功率模块", "UPS")]
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_query_requires_profession_without_calling_backend() -> None:
+    client = FakeAnalysisClient()
+
+    output = await AnalysisAgentService().run("看看以前功率模块的采购情况", client)
+
+    assert client.calls == []
+    assert output.device_term_lookup is not None
+    assert (
+        output.device_term_lookup.status
+        is DeviceTermLookupStatus.CLASSIFICATION_REQUIRED
+    )
+    assert "请补充设备类型" in output.answer
+
+
+@pytest.mark.asyncio
+async def test_semantic_fallback_keeps_original_backend_query() -> None:
+    fallback = DeviceTermLookupResult(
+        status=DeviceTermLookupStatus.FALLBACK,
+        query_term="UPS功率模块",
+        device_profession="UPS",
+        top_k=5,
+        fallback_triggered=True,
+        error_code="RAG_API_TIMEOUT",
+        message="已回退",
+    )
+    client = FakeAnalysisClient()
+
+    output = await AnalysisAgentService(
+        device_term_search=FakeDeviceTermSearch(fallback)
+    ).run("看看以前UPS功率模块的采购情况", client)
+
+    query = client.calls[0][1]["query"]
+    assert query["device_name"] == "UPS功率模块"
+    assert query["device_names"] == []
+    assert output.device_term_lookup is not None
+    assert output.device_term_lookup.fallback_triggered is True
+    assert "已回退" in output.warnings
 
 
 @pytest.mark.asyncio
@@ -389,6 +533,55 @@ async def test_complex_query_graph_returns_structured_analysis_and_persists_cont
 
 
 @pytest.mark.asyncio
+async def test_device_term_lookup_is_recorded_in_graph_trace() -> None:
+    client = FakeAnalysisClient()
+
+    @asynccontextmanager
+    async def factory(*_args):
+        yield client
+
+    lookup = DeviceTermLookupResult(
+        status=DeviceTermLookupStatus.SEMANTIC,
+        query_term="UPS功率模块",
+        device_profession="UPS",
+        semantic_used=True,
+        embedding_latency_ms=12,
+        qdrant_latency_ms=3,
+        total_latency_ms=15,
+        candidates=[
+            DeviceTermCandidate(
+                device_name="UPS模块", device_profession="UPS", score=0.9
+            )
+        ],
+        top_k=5,
+    )
+    configured = AgentSettings(
+        _env_file=None,
+        identity_gateway_secret="analysis-test-secret-123",
+        procurement_backend_url="http://backend.test",
+    )
+    service = ProcurementGraphService(
+        configured,
+        mcp_client_factory=factory,
+        analysis_agent=AnalysisAgentService(
+            device_term_search=FakeDeviceTermSearch(lookup)
+        ),
+    )
+
+    result = await service.run(graph_request("统计以前UPS功率模块的采购数量"))
+
+    trace = next(item for item in result.trace_events if item.name == "device_term_lookup")
+    assert trace.arguments == {
+        "query_device_term": "UPS功率模块",
+        "device_profession": "UPS",
+    }
+    assert trace.result["embedding_latency_ms"] == 12
+    assert trace.result["qdrant_search_latency_ms"] == 3
+    assert trace.result["selected_device_names"] == ["UPS模块"]
+    assert trace.result["fallback_triggered"] is False
+
+
+@pytest.mark.asyncio
 async def test_analysis_dates_are_not_persisted_as_purchase_request_id() -> None:
     client = FakeAnalysisClient()
 
@@ -402,7 +595,7 @@ async def test_analysis_dates_are_not_persisted_as_purchase_request_id() -> None
         procurement_backend_url="http://backend.test",
     )
     graph_request_value = graph_request(
-        "统计 2026-08-01 到 2026-08-05 算力服务器各品牌采购数量和总金额"
+        "统计 2026-08-01 到 2026-08-05 设备类型为服务器的采购数量和总金额"
     )
 
     result = await ProcurementGraphService(settings, mcp_client_factory=factory).run(

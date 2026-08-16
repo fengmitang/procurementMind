@@ -345,7 +345,7 @@ def request_rows() -> list[dict]:
             "applicant_platform_user_id_snapshot": "test-user-01",
             "applicant_name_snapshot": "测试需求人",
             "applicant_mobile_snapshot": "13800009001",
-            "device_profession": "算力服务器",
+            "device_profession": "服务器",
             "device_name": device_name,
             "brand": "TEST-BRAND",
             "model": f"TEST-MODEL-{request_id}",

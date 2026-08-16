@@ -60,7 +60,8 @@ class DeliveryDemoRunner:
         conversation = f"delivery-complex-{uuid4().hex}"
         try:
             first = await self._chat(
-                "统计 2026-08-01 到 2026-08-05 算力服务器各品牌采购数量、平均单价、中位价和总金额",
+                "统计 2026-08-01 到 2026-08-05 设备类型为服务器的各品牌采购数量、"
+                "平均单价、中位价和总金额",
                 conversation,
                 f"{conversation}-1",
             )
@@ -102,7 +103,7 @@ class DeliveryDemoRunner:
                 and str(second_query.created_to) == "2026-08-05"
             ),
             "follow_up_inherited_profession": bool(
-                second_query and second_query.device_professions == ["算力服务器"]
+                second_query and second_query.device_professions == ["服务器"]
             ),
             "follow_up_kept_brand_group": bool(second_query and second_query.group_by == "BRAND"),
             "follow_up_added_delay_exclusion": bool(

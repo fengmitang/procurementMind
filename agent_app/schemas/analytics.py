@@ -1,8 +1,11 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+
+from app.schemas.procurement import DeviceType
 
 
 class AnalyticsAggregation(StrEnum):
@@ -42,8 +45,11 @@ class AnalyticsQueryInput(BaseModel):
     created_to: date | None = None
     created_by_me: bool = False
     building_ids: list[int] = Field(default_factory=list, max_length=50)
-    device_professions: list[str] = Field(default_factory=list, max_length=20)
+    device_professions: list[DeviceType] = Field(default_factory=list, max_length=20)
     device_name: str | None = Field(default=None, min_length=1, max_length=200)
+    device_names: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(
+        default_factory=list, max_length=20
+    )
     brands: list[str] = Field(default_factory=list, max_length=50)
     models: list[str] = Field(default_factory=list, max_length=50)
     supplier_ids: list[int] = Field(default_factory=list, max_length=50)
@@ -83,6 +89,8 @@ class AnalyticsQueryInput(BaseModel):
         ):
             if any(value <= 0 for value in values):
                 raise ValueError(f"{name} 只能包含正整数")
+        if len(self.device_names) != len(set(self.device_names)):
+            raise ValueError("device_names 不允许重复值")
         return self
 
 

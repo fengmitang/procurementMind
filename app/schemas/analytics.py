@@ -50,6 +50,9 @@ class PurchaseQueryRequest(BaseModel):
     building_ids: list[PositiveId] = Field(default_factory=list, max_length=50)
     device_professions: list[DeviceType] = Field(default_factory=list, max_length=20)
     device_name: str | None = Field(default=None, min_length=1, max_length=200)
+    device_names: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(
+        default_factory=list, max_length=20
+    )
     brands: list[BrandText] = Field(default_factory=list, max_length=50)
     models: list[ModelText] = Field(default_factory=list, max_length=50)
     supplier_ids: list[PositiveId] = Field(default_factory=list, max_length=50)
@@ -86,6 +89,7 @@ class PurchaseQueryRequest(BaseModel):
         for values, name in (
             (self.building_ids, "building_ids"),
             (self.device_professions, "device_professions"),
+            (self.device_names, "device_names"),
             (self.brands, "brands"),
             (self.models, "models"),
             (self.supplier_ids, "supplier_ids"),

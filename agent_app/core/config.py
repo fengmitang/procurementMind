@@ -56,6 +56,8 @@ class AgentSettings(BaseSettings):
     rag_cpu_threads: int = Field(default=4, ge=1, le=64)
     qdrant_url: str = "http://127.0.0.1:6333"
     qdrant_collection: str = "procurement_knowledge_child"
+    device_term_qdrant_collection: str = "procurement_device_terms"
+    device_term_top_k: int = Field(default=5, ge=1, le=20)
     qdrant_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     rag_dense_vector_size: int = Field(default=1024, gt=0, le=65536)
     rag_dense_vector_name: str = "dense"
@@ -113,6 +115,7 @@ class AgentSettings(BaseSettings):
         "rag_rerank_instruct",
         "qdrant_url",
         "qdrant_collection",
+        "device_term_qdrant_collection",
         "rag_dense_vector_name",
         "rag_sparse_vector_name",
         mode="before",

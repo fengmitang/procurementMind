@@ -7,8 +7,9 @@ from httpx import ASGITransport, AsyncClient
 
 from app.core.config import get_settings
 from app.core.gateway_auth import build_gateway_signature
-from app.db.session import engine
+from app.db.session import async_session_factory, engine
 from app.main import app
+from app.repositories.device_terms import DeviceTermRepository
 from scripts.seed_demo_data import seed_demo_data
 
 
@@ -64,7 +65,7 @@ async def test_controlled_purchase_query_matches_seeded_standard_answers() -> No
     payload = {
         "created_from": "2026-08-01",
         "created_to": "2026-08-05",
-        "device_professions": ["算力服务器"],
+        "device_professions": ["服务器"],
         "group_by": "BRAND",
         "aggregations": [
             "COUNT",
@@ -100,6 +101,42 @@ async def test_controlled_purchase_query_matches_seeded_standard_answers() -> No
     assert data["effective_query"]["max_scan_rows"] == 5000
     assert other_building.status_code == 200
     assert other_building.json()["data"]["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_purchase_query_accepts_semantic_name_candidates_without_bypassing_scope() -> None:
+    path = "/api/v1/analytics/purchase-query"
+    payload = {
+        "created_from": "2026-08-01",
+        "created_to": "2026-08-05",
+        "device_professions": ["服务器"],
+        "device_name": "不会用于LIKE的原始查询",
+        "device_names": ["测试草稿设备", "测试采购中设备"],
+        "aggregations": ["COUNT"],
+        "page_size": 100,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        admin = await call(client, "POST", path, "test-user-05", json=payload)
+        other_building = await call(client, "POST", path, "test-user-07", json=payload)
+
+    assert admin.status_code == 200, admin.text
+    assert admin.json()["data"]["total"] == 2
+    assert {item["device_name"] for item in admin.json()["data"]["items"]} == {
+        "测试草稿设备",
+        "测试采购中设备",
+    }
+    assert other_building.status_code == 200
+    assert other_building.json()["data"]["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_device_term_index_source_reads_distinct_mysql_names() -> None:
+    async with async_session_factory() as session:
+        terms = await DeviceTermRepository().list_distinct(session)
+
+    assert len(terms) == 9
+    assert {item.device_profession for item in terms} == {"服务器"}
+    assert sum(item.source_count for item in terms) == 9
 
 
 @pytest.mark.asyncio

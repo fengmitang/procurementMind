@@ -170,6 +170,7 @@ def _build_chat_data(
         business_results=_business_results(result),
         form_draft=result.form_draft,
         form_missing_fields=result.form_missing_fields,
+        form_classification=result.form_classification,
         review=result.review,
         evidence_sufficient=result.evidence_sufficient,
         pending_action=result.pending_action,
@@ -276,6 +277,11 @@ def _persisted_message_data(result: GraphRunResult) -> dict:
         ),
         "form_draft": result.form_draft,
         "form_missing_fields": result.form_missing_fields,
+        "form_classification": (
+            result.form_classification.model_dump(mode="json")
+            if result.form_classification is not None
+            else None
+        ),
     }
 
 

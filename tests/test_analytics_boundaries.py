@@ -71,7 +71,7 @@ def test_all_risk_rules_have_stable_non_matching_case() -> None:
         applicant_platform_type_snapshot="TEST_PLATFORM",
         applicant_platform_user_id_snapshot="user-1",
         applicant_name_snapshot="测试用户",
-        device_profession="其他",
+        device_profession="运维工具",
         device_name="完全独立设备",
         brand="UNIQUE",
         model="UNIQUE-1",

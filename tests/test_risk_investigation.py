@@ -75,7 +75,7 @@ def requirement_response() -> MCPToolResponse:
             "requirement_id": 91009,
             "requirement_no": "TEST-PR-OVER-RECEIPT",
             "applicant_fields": {
-                "device_profession": "算力服务器",
+                "device_profession": "服务器",
                 "device_name": "服务器",
                 "brand": "TEST-BRAND",
             },

@@ -112,7 +112,7 @@ async def test_graph_mcp_chain_reads_facts_from_real_backend() -> None:
                         }
                     ),
                     message=(
-                        "统计 2026-08-01 到 2026-08-05 算力服务器各品牌采购数量、"
+                        "统计 2026-08-01 到 2026-08-05 设备类型为服务器的各品牌采购数量、"
                         "平均单价、中位价和总金额"
                     ),
                 )

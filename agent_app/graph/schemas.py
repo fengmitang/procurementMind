@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from agent_app.analysis.schemas import AnalysisOutput
 from agent_app.investigation.schemas import RiskInvestigationOutput
-from agent_app.models.role_schemas import ReviewOutput
+from agent_app.models.role_schemas import FormClassificationData, ReviewOutput
 from agent_app.rag.schemas import RetrievalResult
 from agent_app.schemas.backend import (
     BackendIdentity,
@@ -128,6 +128,7 @@ class GraphRunResult(BaseModel):
     pending_action: "PendingAction | None" = None
     form_draft: dict[str, JsonValue] | None = None
     form_missing_fields: list[str] = Field(default_factory=list)
+    form_classification: FormClassificationData | None = None
 
 
 class HITLActionType(StrEnum):
@@ -186,3 +187,4 @@ class GraphState(TypedDict, total=False):
     compose_output: dict[str, JsonValue] | None
     form_draft: dict[str, JsonValue] | None
     form_missing_fields: list[str]
+    form_classification: dict[str, JsonValue] | None

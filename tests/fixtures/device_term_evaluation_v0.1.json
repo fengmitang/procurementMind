@@ -1,0 +1,24 @@
+{
+  "terms": [
+    {"device_profession": "UPS", "device_name": "UPS模块", "source_count": 12},
+    {"device_profession": "UPS", "device_name": "UPS功率模块", "source_count": 8},
+    {"device_profession": "UPS", "device_name": "模块化UPS功率单元", "source_count": 4},
+    {"device_profession": "服务器", "device_name": "机架服务器", "source_count": 10},
+    {"device_profession": "服务器", "device_name": "通用计算服务器", "source_count": 6},
+    {"device_profession": "传输", "device_name": "核心交换机", "source_count": 9},
+    {"device_profession": "传输", "device_name": "数据中心网络交换设备", "source_count": 3},
+    {"device_profession": "400V配电柜", "device_name": "400V低压配电柜", "source_count": 7},
+    {"device_profession": "10kV开关柜", "device_name": "10kV中压开关柜", "source_count": 5},
+    {"device_profession": "列间空调", "device_name": "列间精密空调", "source_count": 5}
+  ],
+  "cases": [
+    {"case_id": "exact-ups-module", "category": "EXACT", "query": "UPS模块", "target": "UPS模块", "device_profession": "UPS"},
+    {"case_id": "partial-ups-power", "category": "PARTIAL", "query": "功率模块", "target": "UPS功率模块", "device_profession": "UPS"},
+    {"case_id": "ups-different-expression", "category": "SAME_PROFESSION_EXPRESSION", "query": "不间断电源功率单元", "target": "模块化UPS功率单元", "device_profession": "UPS"},
+    {"case_id": "rack-computing", "category": "DOMAIN_TERM", "query": "机架式计算设备", "target": "机架服务器", "device_profession": "服务器"},
+    {"case_id": "core-switching", "category": "DOMAIN_TERM", "query": "核心交换设备", "target": "核心交换机", "device_profession": "传输"},
+    {"case_id": "low-voltage-cabinet", "category": "DOMAIN_TERM", "query": "低压柜", "target": "400V低压配电柜", "device_profession": "400V配电柜"},
+    {"case_id": "cross-profession-cabinet", "category": "CROSS_PROFESSION", "query": "配电柜", "target": "400V低压配电柜", "device_profession": "400V配电柜"},
+    {"case_id": "precision-air-conditioner", "category": "AMBIGUOUS_WITH_CONTEXT", "query": "精密空调", "target": "列间精密空调", "device_profession": "列间空调"}
+  ]
+}

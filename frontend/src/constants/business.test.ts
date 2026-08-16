@@ -1,8 +1,35 @@
 import { describe, expect, it } from 'vitest'
 
-import { businessErrorMessage, localizeBusinessText, statusLabel } from './business'
+import {
+  businessErrorMessage,
+  DEVICE_PROFESSIONS,
+  localizeBusinessText,
+  statusLabel,
+} from './business'
 
 describe('business presentation mapping', () => {
+  it('uses the formal device profession catalog', () => {
+    expect(DEVICE_PROFESSIONS).toEqual([
+      '10kV开关柜',
+      '变压器',
+      '400V配电柜',
+      'UPS',
+      '高压直流',
+      '蓄电池',
+      '监控',
+      '冷水机组',
+      'SHU',
+      '冷却塔',
+      '冷却泵',
+      '机房环境',
+      '水系统',
+      '传输',
+      '服务器',
+      '运维工具',
+      '列间空调',
+    ])
+  })
+
   it('localizes workflow states and backend field names', () => {
     expect(statusLabel('PENDING_WAREHOUSE')).toBe('待入库')
     expect(localizeBusinessText('review_status=COMPLETED, review_result=APPROVED')).toBe(

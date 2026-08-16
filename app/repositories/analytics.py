@@ -222,7 +222,9 @@ class AnalyticsRepository:
             statement = statement.where(
                 PurchaseRequest.device_profession.in_(payload.device_professions)
             )
-        if payload.device_name:
+        if payload.device_names:
+            statement = statement.where(PurchaseRequest.device_name.in_(payload.device_names))
+        elif payload.device_name:
             statement = statement.where(
                 PurchaseRequest.device_name.like(f"%{payload.device_name}%")
             )

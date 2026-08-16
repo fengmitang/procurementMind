@@ -208,7 +208,7 @@ async def test_recommendations_use_real_history_and_filter_active_blacklist() ->
             await session.execute(
                 update(PurchaseRequest)
                 .where(PurchaseRequest.request_id.in_([91002, 91007]))
-                .values(device_profession="IDC网络", device_name="交换机")
+                .values(device_profession="传输", device_name="交换机")
             )
             await session.execute(
                 update(PurchaseRequest)
@@ -231,7 +231,7 @@ async def test_recommendations_use_real_history_and_filter_active_blacklist() ->
             product_path,
             "test-user-01",
             params={
-                "device_profession": "IDC网络",
+                "device_profession": "传输",
                 "device_name": "交换机",
             },
         )

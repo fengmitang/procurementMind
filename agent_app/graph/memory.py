@@ -1,4 +1,5 @@
 from agent_app.graph.schemas import GraphRunRequest, GraphRunResult, PendingAction, RouteType
+from agent_app.models.role_schemas import FormClassificationData
 from agent_app.schemas.analytics import AnalyticsQueryInput
 from agent_app.schemas.backend import ConversationStatePayload
 
@@ -40,6 +41,18 @@ class GraphMemoryMapper:
             return {}
         value = request.restored_state.collected_data.get("form_draft")
         return dict(value) if isinstance(value, dict) else {}
+
+    @staticmethod
+    def form_classification(request: GraphRunRequest) -> FormClassificationData | None:
+        if request.restored_state is None:
+            return None
+        value = request.restored_state.collected_data.get("form_classification")
+        if not isinstance(value, dict):
+            return None
+        try:
+            return FormClassificationData.model_validate(value)
+        except ValueError:
+            return None
 
     @staticmethod
     def to_backend_state(
@@ -84,9 +97,16 @@ class GraphMemoryMapper:
         if result.form_draft:
             collected_data["form_draft"] = result.form_draft
             collected_data["form_missing_fields"] = result.form_missing_fields
+            if result.form_classification is not None:
+                collected_data["form_classification"] = result.form_classification.model_dump(
+                    mode="json"
+                )
+            else:
+                collected_data.pop("form_classification", None)
         elif result.route is RouteType.FORM_PREFILL:
             collected_data.pop("form_draft", None)
             collected_data.pop("form_missing_fields", None)
+            collected_data.pop("form_classification", None)
         recent_messages = list(previous.recent_messages if previous else [])
         recent_messages.extend(
             [

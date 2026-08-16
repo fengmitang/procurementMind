@@ -8,6 +8,7 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from agent_app.analysis.schemas import AnalysisPlan
+from agent_app.domain.device_catalog import build_device_classification_context
 from agent_app.models.protocols import (
     ModelMessage,
     ModelPurpose,
@@ -16,6 +17,8 @@ from agent_app.models.protocols import (
 )
 from agent_app.models.role_schemas import (
     ComposeOutput,
+    FormClassificationData,
+    FormExtractOutput,
     QueryRewriteOutput,
     ReviewOutput,
     RouterOutput,
@@ -31,6 +34,7 @@ _ROLE_MAX_OUTPUT_TOKENS: dict[ModelPurpose, int] = {
     ModelPurpose.ANALYSIS_REPLAN: 1200,
     ModelPurpose.COMPOSE: 1200,
     ModelPurpose.REVIEW: 800,
+    ModelPurpose.FORM_EXTRACT: 1000,
 }
 _ROLE_THINKING: dict[ModelPurpose, bool | None] = {
     ModelPurpose.ROUTER: False,
@@ -39,11 +43,12 @@ _ROLE_THINKING: dict[ModelPurpose, bool | None] = {
     ModelPurpose.ANALYSIS_REPLAN: None,
     ModelPurpose.COMPOSE: False,
     ModelPurpose.REVIEW: False,
+    ModelPurpose.FORM_EXTRACT: False,
 }
 
 
 class StructuredModelRoles:
-    """Provider-neutral structured entry points for the five model roles."""
+    """Provider-neutral structured entry points for Agent model roles."""
 
     def __init__(
         self,
@@ -118,7 +123,41 @@ class StructuredModelRoles:
             )
         return output
 
+    async def extract_form(
+        self,
+        message: str,
+        current_draft: dict[str, Any],
+        previous_classification: FormClassificationData | None,
+    ) -> FormExtractOutput:
+        catalog_context = build_device_classification_context()
+        output, _, _ = await self._run(
+            ModelPurpose.FORM_EXTRACT,
+            FormExtractOutput,
+            (
+                "你是采购申请表单结构化抽取器，不是独立 Agent。只抽取用户明确提供或可由完整"
+                "上下文可靠判断的字段，不得执行写操作，不得编造品牌、型号、数量、用途或设备"
+                "类别。device_profession 只能来自输出 Schema 的17个正式值。typical_terms 是"
+                "分类强提示但仍需结合完整语义；ambiguous_terms 绝不能因为单独命中就直接确定"
+                "类别。CONFIDENT 时必须填写 device_profession；AMBIGUOUS 时不得填写"
+                "device_profession，必须给出最多3个候选；UNKNOWN 时不得填写类别或候选。"
+                "用户对上一轮候选作出明确确认时，可结合 previous_classification 和 current_draft"
+                "完成分类。未在本轮出现的已有字段返回 null，由系统保留旧值。\n\n"
+                f"设备术语目录：\n{catalog_context}"
+            ),
+            {
+                "message": message,
+                "current_draft": current_draft,
+                "previous_classification": (
+                    previous_classification.model_dump(mode="json")
+                    if previous_classification is not None
+                    else None
+                ),
+            },
+        )
+        return output
+
     async def plan(self, message: str, confirmed_context: dict[str, Any] | None) -> AnalysisPlan:
+        catalog_context = build_device_classification_context()
         output, _, _ = await self._run(
             ModelPurpose.ANALYSIS_PLAN,
             AnalysisPlan,
@@ -134,12 +173,16 @@ class StructuredModelRoles:
                 "page、page_size。group_by 仅允许 BRAND、BUILDING、SUPPLIER、DEVICE_NAME、"
                 "STATUS、MONTH；aggregations 仅允许 COUNT、AVERAGE_UNIT_PRICE、"
                 "MEDIAN_UNIT_PRICE、TOTAL_AMOUNT。"
+                "device_names 是系统在语义检索后写入的历史名称候选，Planner 禁止生成。"
                 '正确格式示例："tool":"query_purchase_analytics","arguments":{"query":'
                 '{"group_by":"BUILDING","aggregations":["COUNT","TOTAL_AMOUNT"],'
                 '"page":1,"page_size":20}}。'
                 "get_supplier_performance、get_similar_cases、get_requirement_risk_signals 仅在系统"
                 "已经由页面上下文或业务单号解析出内部定位键时使用；不得要求用户提供数据库主键，"
                 "也不得编造定位键。query_context 应与分析查询条件一致。"
+                "识别 device_professions 时必须使用以下统一术语目录；typical_terms 可作为强提示，"
+                "ambiguous_terms 单独出现时不得直接确定类别。\n\n"
+                f"设备术语目录：\n{catalog_context}"
             ),
             {"message": message, "confirmed_context": confirmed_context},
         )

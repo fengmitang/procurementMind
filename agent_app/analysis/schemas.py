@@ -2,6 +2,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
+from agent_app.device_terms.schemas import DeviceTermLookupResult
 from agent_app.schemas.analytics import AnalyticsQueryInput
 
 
@@ -130,3 +131,4 @@ class AnalysisOutput(BaseModel):
     step_results: list[AnalysisStepResult]
     warnings: list[str] = Field(default_factory=list)
     partial_success: bool = False
+    device_term_lookup: DeviceTermLookupResult | None = None

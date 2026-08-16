@@ -199,6 +199,7 @@ class HITLService:
                 purchase_request_id = created_id
             collected_data.pop("form_draft", None)
             collected_data.pop("form_missing_fields", None)
+            collected_data.pop("form_classification", None)
             missing_fields = []
             pending_field = None
         collected_data["last_resolved_action"] = resolution.model_dump(mode="json")

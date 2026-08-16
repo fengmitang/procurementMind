@@ -99,7 +99,7 @@ def create_draft_action() -> PendingAction:
         action_type=HITLActionType.CREATE_PURCHASE_DRAFT,
         draft={
             "building_id": 1,
-            "device_profession": "算力服务器",
+            "device_profession": "服务器",
             "device_name": "浪潮服务器",
             "brand": "浪潮",
             "quantity": 3,
@@ -394,7 +394,7 @@ async def test_create_draft_hitl_flow_persists_real_database_draft(identity):
                 assert row.request_no == result.result["requirement_no"]
                 assert row.status == "DRAFT"
                 assert row.building_id == 1
-                assert row.device_profession == "算力服务器"
+                assert row.device_profession == "服务器"
                 assert row.device_name == "浪潮服务器"
                 assert row.brand == "浪潮"
                 assert row.quantity == 3

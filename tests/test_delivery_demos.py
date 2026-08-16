@@ -31,7 +31,7 @@ def analysis_data(*, follow_up: bool) -> dict:
     query = {
         "created_from": "2026-08-01",
         "created_to": "2026-08-05",
-        "device_professions": ["算力服务器"],
+        "device_professions": ["服务器"],
         "group_by": "BRAND",
         "aggregations": [
             "COUNT",

@@ -10,6 +10,7 @@ from agent_app.mcp.runtime import MCPRuntime
 from agent_app.mcp.schemas import MCPToolResponse
 from agent_app.mcp.tools import ProcurementTools
 from agent_app.schemas.analytics import AnalyticsQueryInput
+from app.schemas.procurement import DeviceType
 
 
 @asynccontextmanager
@@ -96,7 +97,7 @@ async def search_purchase_records(
 @mcp.tool(**tool_registration("recommend_products"))
 async def recommend_products(
     device_name: LimitedText,
-    device_profession: LimitedText | None = None,
+    device_profession: DeviceType | None = None,
     keyword: LimitedText | None = None,
     limit: ResultLimit = 10,
 ) -> MCPToolResponse:

@@ -10,6 +10,8 @@ from agent_app.core.config import AgentSettings, get_agent_settings
 from agent_app.core.exceptions import register_agent_exception_handlers
 from agent_app.core.logging import configure_agent_logging
 from agent_app.core.middleware import AgentTraceIdMiddleware
+from agent_app.device_terms.service import DeviceTermSearchService
+from agent_app.device_terms.store import QdrantDeviceTermStore
 from agent_app.graph.service import ProcurementGraphService
 from agent_app.hitl.service import HITLService
 from agent_app.models.registry import build_default_model_registry
@@ -53,6 +55,7 @@ def create_agent_app(
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         configure_agent_logging(resolved_settings)
         qdrant_store: QdrantKnowledgeStore | None = None
+        device_term_store: QdrantDeviceTermStore | None = None
         active_rag_models = rag_models
         if rag_models is None and resolved_settings.rag_models_configured:
             active_rag_models = await asyncio.to_thread(
@@ -77,11 +80,24 @@ def create_agent_app(
                     ),
                 )
             )
+            if hasattr(resolved_graph_service, "set_device_term_search"):
+                device_term_store = QdrantDeviceTermStore(resolved_settings)
+                resolved_graph_service.set_device_term_search(
+                    DeviceTermSearchService(
+                        embedding_provider=active_rag_models,
+                        store=device_term_store,
+                        top_k=resolved_settings.device_term_top_k,
+                        embedding_batch_size=resolved_settings.rag_embedding_batch_size,
+                        embedding_max_length=resolved_settings.rag_embedding_max_length,
+                    )
+                )
         try:
             yield
         finally:
             if qdrant_store is not None:
                 await qdrant_store.close()
+            if device_term_store is not None:
+                await device_term_store.close()
             if rag_models is None and active_rag_models is not None:
                 close_rag = getattr(active_rag_models, "close", None)
                 if callable(close_rag):

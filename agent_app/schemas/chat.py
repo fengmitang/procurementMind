@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from agent_app.analysis.schemas import AnalysisOutput
 from agent_app.graph.schemas import PendingAction, UIContext
 from agent_app.investigation.schemas import RiskInvestigationOutput
-from agent_app.models.role_schemas import ReviewOutput
+from agent_app.models.role_schemas import FormClassificationData, ReviewOutput
 from agent_app.observability.schemas import ExecutionDetails
 from agent_app.rag.schemas import RetrievalResult
 
@@ -56,6 +56,7 @@ class ChatData(BaseModel):
     business_results: list[BusinessResultData] = Field(default_factory=list)
     form_draft: dict | None = None
     form_missing_fields: list[str] = Field(default_factory=list)
+    form_classification: FormClassificationData | None = None
     review: ReviewOutput | None = None
     evidence_sufficient: bool = False
     pending_action: PendingAction | None = None

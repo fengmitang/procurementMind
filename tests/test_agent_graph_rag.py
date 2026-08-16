@@ -1,10 +1,12 @@
 import pytest
+from pydantic import ValidationError
 
 from agent_app.graph.memory import GraphMemoryMapper
 from agent_app.graph.schemas import RouteType
 from agent_app.graph.service import ProcurementGraphService
 from agent_app.models.fake import ScriptedModelAdapter
 from agent_app.models.protocols import ModelPurpose, StructuredModelResponse
+from agent_app.models.role_schemas import DeviceClassificationStatus, FormExtractOutput
 from agent_app.models.roles import StructuredModelRoles
 from agent_app.models.runner import StructuredModelRunner
 from agent_app.rag.schemas import (
@@ -16,6 +18,7 @@ from agent_app.rag.schemas import (
     RetrievedEvidence,
 )
 from agent_app.schemas.backend import ConversationStateData, UserRoleData
+from app.schemas.procurement import DEVICE_PROFESSIONS
 from tests.test_agent_graph import (
     FakeMCPClient,
     factory_for,
@@ -194,7 +197,7 @@ async def test_form_prefill_creates_draft_and_never_executes_business_action() -
     assert result.pending_action is None
     assert result.form_draft == {
         "device_name": "服务器",
-        "device_profession": "算力服务器",
+        "device_profession": "服务器",
     }
     assert result.form_missing_fields == [
         "building_id",
@@ -210,6 +213,149 @@ async def test_form_prefill_creates_draft_and_never_executes_business_action() -
     assert "还需要补充" in result.reply
 
 
+@pytest.mark.parametrize("device_profession", DEVICE_PROFESSIONS)
+def test_form_prefill_extracts_only_formal_device_professions(
+    device_profession: str,
+) -> None:
+    fields = ProcurementGraphService._extract_form_fields(
+        f"我要采购一台设备，设备类型为{device_profession}"
+    )
+
+    assert fields.device_profession == device_profession
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_profession"),
+    [
+        ("买3台机架服务器", "服务器"),
+        ("采购核心交换机", "传输"),
+        ("采购UPS主机", "UPS"),
+        ("更换UPS功率模块", "UPS"),
+        ("采购10kV开关柜", "10kV开关柜"),
+        ("采购400V低压配电柜", "400V配电柜"),
+    ],
+)
+def test_catalog_driven_form_fallback_classifies_typical_terms(
+    message: str,
+    expected_profession: str,
+) -> None:
+    extracted = ProcurementGraphService._extract_form_fields(message)
+
+    assert extracted.classification_status is DeviceClassificationStatus.CONFIDENT
+    assert extracted.device_profession == expected_profession
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "采购3个功率模块",
+        "采购一个配电柜",
+        "采购精密空调",
+    ],
+)
+def test_ambiguous_terms_never_set_device_profession(message: str) -> None:
+    extracted = ProcurementGraphService._extract_form_fields(message)
+
+    assert extracted.classification_status is DeviceClassificationStatus.AMBIGUOUS
+    assert extracted.device_profession is None
+    assert extracted.candidate_professions
+
+
+def test_form_extract_schema_rejects_profession_outside_canonical_values() -> None:
+    with pytest.raises(ValidationError):
+        FormExtractOutput(
+            classification_status="CONFIDENT",
+            candidate_professions=[],
+            device_profession="未定义设备类型",
+        )
+
+
+def test_form_extract_schema_rejects_ambiguous_direct_classification() -> None:
+    with pytest.raises(ValidationError, match="不得写入"):
+        FormExtractOutput(
+            classification_status="AMBIGUOUS",
+            candidate_professions=["UPS"],
+            device_profession="UPS",
+        )
+
+
+@pytest.mark.asyncio
+async def test_form_extract_model_ambiguity_is_persisted_and_confirmation_resolves_it(
+) -> None:
+    adapter = ScriptedModelAdapter(
+        [
+            model_response(
+                {
+                    "classification_status": "AMBIGUOUS",
+                    "candidate_professions": ["UPS", "传输"],
+                    "device_name": "功率模块",
+                    "quantity": 3,
+                    "unit": "个",
+                }
+            ),
+            model_response(
+                {
+                    "classification_status": "CONFIDENT",
+                    "candidate_professions": [],
+                    "device_profession": "UPS",
+                    "application_reason": "替换故障模块",
+                }
+            ),
+        ]
+    )
+    roles = StructuredModelRoles(
+        StructuredModelRunner(adapter, timeout_seconds=1, max_retries=0),
+        "trace-form-extract",
+    )
+    service = ProcurementGraphService(settings(), model_roles=roles)
+
+    first_request = applicant_request("我要采购3个功率模块")
+    first = await service.run(first_request)
+    first_state = GraphMemoryMapper.to_backend_state(first_request, first)
+
+    assert first.form_draft is not None
+    assert "device_profession" not in first.form_draft
+    assert first.form_classification is not None
+    assert (
+        first.form_classification.classification_status
+        is DeviceClassificationStatus.AMBIGUOUS
+    )
+    assert first.form_classification.candidate_professions == ["UPS", "传输"]
+    assert first.pending_action is None
+    assert "请确认" in first.reply
+    assert first_state.collected_data["form_classification"]["classification_status"] == (
+        "AMBIGUOUS"
+    )
+    first_trace = next(item for item in first.trace_events if item.name == "form_extract")
+    assert first_trace.result["purpose"] == "FORM_EXTRACT"
+    assert first_trace.result["model"] == "fake-graph"
+    assert first_trace.result["latency_ms"] == 1
+    assert first_trace.result["classification_status"] == "AMBIGUOUS"
+
+    restored = ConversationStateData(
+        conversation_id=1,
+        restored_from_snapshot=True,
+        **first_state.model_dump(mode="python"),
+    )
+    second_request = applicant_request("是UPS的，用于替换故障模块").model_copy(
+        update={"restored_state": restored}
+    )
+    second = await service.run(second_request)
+
+    assert second.form_draft is not None
+    assert second.form_draft["device_name"] == "功率模块"
+    assert second.form_draft["device_profession"] == "UPS"
+    assert second.form_classification is not None
+    assert (
+        second.form_classification.classification_status
+        is DeviceClassificationStatus.CONFIDENT
+    )
+    assert [request.purpose for request in adapter.requests] == [
+        ModelPurpose.FORM_EXTRACT,
+        ModelPurpose.FORM_EXTRACT,
+    ]
+
+
 @pytest.mark.asyncio
 async def test_natural_purchase_intent_keeps_known_fields_and_asks_only_for_missing() -> None:
     result = await ProcurementGraphService(settings()).run(
@@ -218,7 +364,7 @@ async def test_natural_purchase_intent_keeps_known_fields_and_asks_only_for_miss
 
     assert result.route is RouteType.FORM_PREFILL
     assert result.form_draft["device_name"] == "服务器"
-    assert result.form_draft["device_profession"] == "算力服务器"
+    assert result.form_draft["device_profession"] == "服务器"
     assert result.form_draft["brand"] == "浪潮"
     assert "device_name" not in result.form_missing_fields
     assert "brand" not in result.form_missing_fields

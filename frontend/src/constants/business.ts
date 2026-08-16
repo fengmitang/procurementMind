@@ -1,3 +1,23 @@
+export const DEVICE_PROFESSIONS = [
+  '10kV开关柜',
+  '变压器',
+  '400V配电柜',
+  'UPS',
+  '高压直流',
+  '蓄电池',
+  '监控',
+  '冷水机组',
+  'SHU',
+  '冷却塔',
+  '冷却泵',
+  '机房环境',
+  '水系统',
+  '传输',
+  '服务器',
+  '运维工具',
+  '列间空调',
+] as const
+
 export const statusLabels: Record<string, string> = {
   DRAFT: '草稿',
   PENDING_REVIEW: '待审批',

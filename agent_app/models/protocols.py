@@ -12,6 +12,7 @@ class ModelPurpose(StrEnum):
     ANALYSIS_REPLAN = "ANALYSIS_REPLAN"
     COMPOSE = "COMPOSE"
     REVIEW = "REVIEW"
+    FORM_EXTRACT = "FORM_EXTRACT"
 
 
 class ModelUsageSource(StrEnum):

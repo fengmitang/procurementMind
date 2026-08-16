@@ -1,7 +1,10 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Query
 
 from app.api.dependencies import CurrentUserDependency, DbSession
 from app.core.responses import ApiResponse
+from app.schemas.procurement import DeviceType
 from app.schemas.recommendations import (
     ProductRecommendationData,
     PurchaseHistoryRecommendationData,
@@ -17,7 +20,7 @@ async def recommend_products(
     current_user: CurrentUserDependency,
     session: DbSession,
     device_name: str = Query(min_length=1),
-    device_profession: str | None = Query(default=None),
+    device_profession: Annotated[DeviceType | None, Query()] = None,
     keyword: str | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=30),
 ) -> ApiResponse[ProductRecommendationData]:

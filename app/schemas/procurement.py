@@ -4,16 +4,27 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-DeviceType = Literal[
-    "电气",
-    "暖通",
-    "弱电",
+DEVICE_PROFESSIONS = (
+    "10kV开关柜",
+    "变压器",
+    "400V配电柜",
+    "UPS",
+    "高压直流",
+    "蓄电池",
+    "监控",
+    "冷水机组",
+    "SHU",
+    "冷却塔",
+    "冷却泵",
     "机房环境",
-    "工器具",
-    "算力服务器",
-    "IDC网络",
-    "其他",
-]
+    "水系统",
+    "传输",
+    "服务器",
+    "运维工具",
+    "列间空调",
+)
+
+DeviceType = Literal[*DEVICE_PROFESSIONS]
 
 
 class CreateRequirementRequest(BaseModel):

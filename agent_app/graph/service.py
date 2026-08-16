@@ -14,6 +14,8 @@ from agent_app.analysis.planner import DeterministicAnalysisPlanner
 from agent_app.analysis.schemas import AnalysisOutput
 from agent_app.analysis.service import AnalysisAgentService
 from agent_app.core.config import AgentSettings
+from agent_app.device_terms.service import DeviceTermSearchService
+from agent_app.domain.device_catalog import get_device_catalog
 from agent_app.graph.memory import GraphMemoryMapper
 from agent_app.graph.router import FirstVersionRouter
 from agent_app.graph.schemas import (
@@ -36,6 +38,9 @@ from agent_app.models.protocols import ModelPurpose
 from agent_app.models.role_schemas import (
     ComposeCitation,
     ComposeOutput,
+    DeviceClassificationStatus,
+    FormClassificationData,
+    FormExtractOutput,
     ReviewIssue,
     ReviewIssueCode,
     ReviewOutput,
@@ -99,6 +104,7 @@ class ProcurementGraphService:
         model_roles: StructuredModelRoles | None = None,
     ) -> None:
         self.settings = settings
+        get_device_catalog()
         self.router = router or FirstVersionRouter()
         self.mcp_client_factory = mcp_client_factory
         self.analysis_agent = analysis_agent or AnalysisAgentService(
@@ -124,6 +130,10 @@ class ProcurementGraphService:
     def set_model_roles(self, model_roles: StructuredModelRoles) -> None:
         self.model_roles = model_roles
 
+    def set_device_term_search(self, service: DeviceTermSearchService) -> None:
+        if hasattr(self.analysis_agent, "set_device_term_search"):
+            self.analysis_agent.set_device_term_search(service)
+
     async def run(
         self,
         request: GraphRunRequest,
@@ -134,6 +144,7 @@ class ProcurementGraphService:
         restored_analysis_query = GraphMemoryMapper.analysis_query(request)
         restored_pending_action = GraphMemoryMapper.pending_action(request)
         restored_form_draft = GraphMemoryMapper.form_draft(request)
+        restored_form_classification = GraphMemoryMapper.form_classification(request)
         initial: GraphState = {
             "task_id": str(request.task_id),
             "trace_id": request.trace_id,
@@ -176,6 +187,11 @@ class ProcurementGraphService:
                 request.restored_state.collected_data.get("form_missing_fields", [])
                 if request.restored_state
                 else []
+            ),
+            "form_classification": (
+                restored_form_classification.model_dump(mode="json")
+                if restored_form_classification is not None
+                else None
             ),
         }
         invoke_config = {
@@ -228,6 +244,11 @@ class ProcurementGraphService:
             ),
             form_draft=final.get("form_draft"),
             form_missing_fields=final.get("form_missing_fields", []),
+            form_classification=(
+                FormClassificationData.model_validate(final["form_classification"])
+                if final.get("form_classification")
+                else None
+            ),
         )
 
     def _build_graph(self):
@@ -292,8 +313,13 @@ class ProcurementGraphService:
         await self._emit_stream("thinking", {"message": "正在理解你的问题"})
         started = time.perf_counter()
         model_error: StructuredModelRunError | None = None
-        model_router_used = self.model_roles is not None and self.router.should_use_model(
-            state["message"]
+        continuing_form_prefill = bool(
+            state.get("form_draft") and state.get("form_missing_fields")
+        )
+        model_router_used = (
+            not continuing_form_prefill
+            and self.model_roles is not None
+            and self.router.should_use_model(state["message"])
         )
         if model_router_used:
             try:
@@ -305,7 +331,7 @@ class ProcurementGraphService:
                 route = self.router.classify(state["message"])
         else:
             route = self.router.classify(state["message"])
-        if state.get("form_draft") and state.get("form_missing_fields"):
+        if continuing_form_prefill:
             route = RouteType.FORM_PREFILL
         requirement_id = None
         if route in {
@@ -473,8 +499,48 @@ class ProcurementGraphService:
     async def _form_prefill_node(self, state: GraphState) -> dict[str, Any]:
         if state["step_count"] >= self.settings.max_execution_steps:
             return self._boundary_failure(state, "GRAPH_STEP_LIMIT", "已达到最大执行步骤")
+        started = time.perf_counter()
         draft = dict(state.get("form_draft") or {})
-        draft.update(self._extract_form_fields(state["message"]))
+        previous_classification = (
+            FormClassificationData.model_validate(state["form_classification"])
+            if state.get("form_classification")
+            else None
+        )
+        model_error: StructuredModelRunError | None = None
+        model_used = self.model_roles is not None
+        if self.model_roles is not None:
+            try:
+                extracted = await self.model_roles.extract_form(
+                    state["message"], draft, previous_classification
+                )
+            except StructuredModelRunError as exc:
+                model_error = exc
+                extracted = self._extract_form_fields(state["message"])
+        else:
+            extracted = self._extract_form_fields(state["message"])
+
+        extracted_fields = extracted.model_dump(
+            mode="json",
+            exclude={
+                "classification_status",
+                "candidate_professions",
+                "device_profession",
+            },
+            exclude_none=True,
+        )
+        draft.update(extracted_fields)
+        classification = extracted.classification()
+        if (
+            extracted.classification_status is DeviceClassificationStatus.UNKNOWN
+            and extracted.device_name is None
+            and previous_classification is not None
+        ):
+            classification = previous_classification
+        if extracted.classification_status is DeviceClassificationStatus.CONFIDENT:
+            assert extracted.device_profession is not None
+            draft["device_profession"] = extracted.device_profession
+        elif classification.classification_status is not DeviceClassificationStatus.CONFIDENT:
+            draft.pop("device_profession", None)
         current_user = state["current_user"]
         buildings = current_user.get("buildings", [])
         if "building_id" not in draft and isinstance(buildings, list) and len(buildings) == 1:
@@ -492,7 +558,31 @@ class ProcurementGraphService:
         )
         missing = [field for field in required if draft.get(field) in (None, "")]
         pending = (
-            PendingAction(action_type="CREATE_PURCHASE_DRAFT", draft=draft) if not missing else None
+            PendingAction(action_type="CREATE_PURCHASE_DRAFT", draft=draft)
+            if not missing
+            and classification.classification_status is DeviceClassificationStatus.CONFIDENT
+            else None
+        )
+        model_metadata = (
+            self.model_roles.trace_metadata(ModelPurpose.FORM_EXTRACT)
+            if self.model_roles is not None and model_error is None
+            else self._model_error_metadata(model_error)
+        )
+        extract_trace = TraceEvent(
+            event_type=TraceEventType.GRAPH,
+            name="form_extract",
+            status="FALLBACK" if model_error else "SUCCESS",
+            duration_ms=self._elapsed_ms(started),
+            arguments={"message_length": len(state["message"])},
+            result={
+                "purpose": ModelPurpose.FORM_EXTRACT.value,
+                "model_used": model_used and model_error is None,
+                "model": model_metadata.get("actual_model"),
+                "classification_status": classification.classification_status.value,
+                "candidate_professions": classification.candidate_professions,
+                **model_metadata,
+            },
+            error_code=model_error.code if model_error else None,
         )
         trace = TraceEvent(
             event_type=TraceEventType.GRAPH,
@@ -502,32 +592,74 @@ class ProcurementGraphService:
                 "action_type": pending.action_type if pending else None,
                 "missing_fields": missing,
                 "executed": False,
+                "classification_status": classification.classification_status.value,
             },
         )
-        return {
+        updates: dict[str, Any] = {
             "step_count": state["step_count"] + 1,
             "pending_action": pending.model_dump(mode="json") if pending else None,
             "form_draft": draft,
             "form_missing_fields": missing,
-            "trace_events": [*state["trace_events"], trace.model_dump(mode="json")],
+            "form_classification": classification.model_dump(mode="json"),
+            "trace_events": [
+                *state["trace_events"],
+                extract_trace.model_dump(mode="json"),
+                trace.model_dump(mode="json"),
+            ],
         }
+        if model_error:
+            error = GraphError(
+                code=model_error.code,
+                message=f"模型表单抽取失败，已使用保守目录规则：{model_error.message}",
+                source="model_form_extract",
+            )
+            updates["errors"] = [*state["errors"], error.model_dump(mode="json")]
+        return updates
 
     @staticmethod
-    def _extract_form_fields(message: str) -> dict[str, Any]:
+    def _extract_form_fields(message: str) -> FormExtractOutput:
         fields: dict[str, Any] = {}
         normalized = re.sub(r"\s+", "", message)
-        device_map = {
-            "服务器": "算力服务器",
-            "交换机": "IDC网络",
-            "路由器": "IDC网络",
-            "防火墙": "IDC网络",
-            "UPS": "电气",
-        }
-        for device_name, profession in device_map.items():
-            if device_name.lower() in normalized.lower():
-                fields["device_name"] = device_name
-                fields["device_profession"] = profession
-                break
+        catalog = get_device_catalog()
+        canonical_matches = [
+            profession
+            for profession in catalog.professions
+            if profession.casefold() in normalized.casefold()
+        ]
+        profession_is_explicit = any(
+            marker in normalized for marker in ("设备类型", "设备专业", "专业分类")
+        )
+        typical_matches = catalog.typical_matches(normalized)
+        ambiguous_matches = catalog.ambiguous_matches(normalized)
+        if profession_is_explicit and len(canonical_matches) == 1:
+            profession = canonical_matches[0]
+            fields["classification_status"] = DeviceClassificationStatus.CONFIDENT
+            fields["candidate_professions"] = []
+            fields["device_profession"] = profession
+            fields["device_name"] = profession
+        elif len(typical_matches) == 1:
+            profession, terms = next(iter(typical_matches.items()))
+            fields["classification_status"] = DeviceClassificationStatus.CONFIDENT
+            fields["candidate_professions"] = []
+            fields["device_profession"] = profession
+            fields["device_name"] = max(terms, key=len)
+        elif typical_matches:
+            fields["classification_status"] = DeviceClassificationStatus.AMBIGUOUS
+            fields["candidate_professions"] = list(typical_matches)[:3]
+            fields["device_name"] = max(
+                (term for terms in typical_matches.values() for term in terms),
+                key=len,
+            )
+        elif ambiguous_matches:
+            fields["classification_status"] = DeviceClassificationStatus.AMBIGUOUS
+            fields["candidate_professions"] = list(ambiguous_matches)[:3]
+            fields["device_name"] = max(
+                (term for terms in ambiguous_matches.values() for term in terms),
+                key=len,
+            )
+        else:
+            fields["classification_status"] = DeviceClassificationStatus.UNKNOWN
+            fields["candidate_professions"] = []
         brand_match = re.search(r"(浪潮|华为|联想|戴尔|惠普|新华三|H3C)", normalized, re.IGNORECASE)
         if brand_match:
             fields["brand"] = brand_match.group(1)
@@ -540,7 +672,7 @@ class ProcurementGraphService:
             fields["application_reason"] = (
                 reason_match.group(1).lstrip("是为：:，, ").strip("。；; ")
             )
-        return fields
+        return FormExtractOutput.model_validate(fields)
 
     async def _sufficiency_node(self, state: GraphState) -> dict[str, Any]:
         route = RouteType(state["route"])
@@ -960,6 +1092,37 @@ class ProcurementGraphService:
         trace_events = [*state["trace_events"]]
         if planner_trace is not None:
             trace_events.append(planner_trace.model_dump(mode="json"))
+        if output.device_term_lookup is not None:
+            lookup = output.device_term_lookup
+            lookup_trace = TraceEvent(
+                event_type=TraceEventType.GRAPH,
+                name="device_term_lookup",
+                status=(
+                    "FALLBACK"
+                    if lookup.fallback_triggered
+                    else "NEEDS_INPUT"
+                    if lookup.status.value == "CLASSIFICATION_REQUIRED"
+                    else "SUCCESS"
+                ),
+                duration_ms=lookup.total_latency_ms,
+                arguments={
+                    "query_device_term": lookup.query_term,
+                    "device_profession": lookup.device_profession,
+                },
+                result={
+                    "status": lookup.status.value,
+                    "exact_match": lookup.exact_match,
+                    "semantic_retrieval_used": lookup.semantic_used,
+                    "embedding_latency_ms": lookup.embedding_latency_ms,
+                    "qdrant_search_latency_ms": lookup.qdrant_latency_ms,
+                    "candidate_count": len(lookup.candidates),
+                    "top_k": lookup.top_k,
+                    "selected_device_names": lookup.selected_names,
+                    "fallback_triggered": lookup.fallback_triggered,
+                },
+                error_code=lookup.error_code,
+            )
+            trace_events.append(lookup_trace.model_dump(mode="json"))
         trace_events.append(trace.model_dump(mode="json"))
         graph_errors = [*state["errors"]]
         if planner_error is not None:
@@ -1324,6 +1487,31 @@ class ProcurementGraphService:
             return AnalysisOutput.model_validate(state["analysis"]).answer
         if route is RouteType.FORM_PREFILL:
             missing = state.get("form_missing_fields", [])
+            classification = (
+                FormClassificationData.model_validate(state["form_classification"])
+                if state.get("form_classification")
+                else None
+            )
+            if (
+                classification is not None
+                and classification.classification_status
+                is DeviceClassificationStatus.AMBIGUOUS
+            ):
+                candidates = "、".join(classification.candidate_professions)
+                return (
+                    "我已记录目前能够确认的采购信息，但设备类型还不能直接确定。\n\n"
+                    f"**可能的设备类型：{candidates}。请确认具体属于哪一类，或补充所属系统、"
+                    "电压等级及设备用途。**"
+                )
+            if (
+                classification is not None
+                and classification.classification_status is DeviceClassificationStatus.UNKNOWN
+                and "device_profession" in missing
+            ):
+                return (
+                    "我已记录目前能够确认的采购信息，但现有描述不足以判断设备类型。\n\n"
+                    "**请补充设备所属系统、设备用途、电压等级或更完整的设备名称。**"
+                )
             if missing:
                 labels = {
                     "building_id": "所属楼宇",

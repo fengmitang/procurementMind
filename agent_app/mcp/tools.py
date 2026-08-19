@@ -165,6 +165,42 @@ class ProcurementTools:
             ),
         )
 
+    async def search_product_history_evidence(self, **arguments) -> MCPToolResponse:
+        return await self._execute(
+            "search_product_history_evidence",
+            "/api/v1/recommendations/evidence/products",
+            lambda: self.backend.search_product_history_evidence(
+                self.context.identity, self.context.trace_id, **arguments
+            ),
+        )
+
+    async def search_supplier_recommendation_evidence(self, **arguments) -> MCPToolResponse:
+        return await self._execute(
+            "search_supplier_recommendation_evidence",
+            "/api/v1/recommendations/evidence/suppliers",
+            lambda: self.backend.search_supplier_recommendation_evidence(
+                self.context.identity, self.context.trace_id, **arguments
+            ),
+        )
+
+    async def search_supplier_contract_evidence(self, **arguments) -> MCPToolResponse:
+        return await self._execute(
+            "search_supplier_contract_evidence",
+            "/api/v1/recommendations/evidence/supplier-contracts",
+            lambda: self.backend.search_supplier_contract_evidence(
+                self.context.identity, self.context.trace_id, **arguments
+            ),
+        )
+
+    async def search_warehouse_evidence(self, **arguments) -> MCPToolResponse:
+        return await self._execute(
+            "search_warehouse_evidence",
+            "/api/v1/recommendations/evidence/warehouses",
+            lambda: self.backend.search_warehouse_evidence(
+                self.context.identity, self.context.trace_id, **arguments
+            ),
+        )
+
     async def query_purchase_analytics(
         self,
         query: AnalyticsQueryInput,

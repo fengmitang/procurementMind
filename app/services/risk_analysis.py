@@ -343,7 +343,9 @@ class RiskAnalysisService:
             factors.append("building")
         if current.request.quantity and candidate.request.quantity:
             larger = max(current.request.quantity, candidate.request.quantity)
-            difference_ratio = abs(current.request.quantity - candidate.request.quantity) / larger
+            difference_ratio = Decimal(
+                abs(current.request.quantity - candidate.request.quantity)
+            ) / Decimal(larger)
             if difference_ratio <= Decimal("0.20"):
                 score += Decimal("0.10")
                 factors.append("quantity_range")
@@ -401,7 +403,7 @@ class RiskAnalysisService:
         )
 
     @staticmethod
-    def _decimal_text(value: Decimal | None) -> str | None:
+    def _decimal_text(value: Decimal | int | None) -> str | None:
         return str(value) if value is not None else None
 
     @staticmethod

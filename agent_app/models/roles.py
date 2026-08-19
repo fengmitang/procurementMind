@@ -99,6 +99,8 @@ class StructuredModelRoles:
                 "就必须使用实时工具。若同时询问该状态下接下来怎么处理、适用什么流程或规则，必须"
                 "路由到 HYBRID，同时使用实时工具和知识库。数据库主键属于内部字段，绝不能要求"
                 "用户提供；用户只需提供采购单号或自然语言描述。明确采购意图应路由 FORM_PREFILL。"
+                "用户主动请求历史品牌型号、供应商、税率合同联系方式或入库位置推荐时，路由到"
+                "RECOMMENDATION；普通知识定义或制度问题不得路由为推荐。"
             ),
             {"message": message},
         )
@@ -136,7 +138,11 @@ class StructuredModelRoles:
             (
                 "你是采购申请表单结构化抽取器，不是独立 Agent。只抽取用户明确提供或可由完整"
                 "上下文可靠判断的字段，不得执行写操作，不得编造品牌、型号、数量、用途或设备"
-                "类别。device_profession 只能来自输出 Schema 的17个正式值。typical_terms 是"
+                "类别。quantity 必须是正整数；将中文整数数量规范化为阿拉伯整数，例如两台"
+                "输出 quantity=2、unit=台，十二个输出 quantity=12、unit=个，二十套输出"
+                "quantity=20、unit=套。小数数量不得作为合法采购数量，几台、十几台、两三台、"
+                "大约五台等模糊数量不得编造具体值，应返回 quantity=null。"
+                "device_profession 只能来自输出 Schema 的17个正式值。typical_terms 是"
                 "分类强提示但仍需结合完整语义；ambiguous_terms 绝不能因为单独命中就直接确定"
                 "类别。CONFIDENT 时必须填写 device_profession；AMBIGUOUS 时不得填写"
                 "device_profession，必须给出最多3个候选；UNKNOWN 时不得填写类别或候选。"

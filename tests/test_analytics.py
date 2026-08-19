@@ -286,7 +286,7 @@ async def test_risk_signals_are_factual_and_permission_scoped() -> None:
         item["risk_code"]: item for item in quantity_response.json()["data"]["signals"]
     }
     assert quantity_signals["QUANTITY_DEVIATION"]["matched"] is True
-    assert quantity_signals["QUANTITY_DEVIATION"]["facts"]["receipt_variance"] == "-2.000"
+    assert quantity_signals["QUANTITY_DEVIATION"]["facts"]["receipt_variance"] == "-2"
     assert denied.status_code == 403
 
 
@@ -308,7 +308,7 @@ async def test_seeded_data_covers_price_blacklist_and_non_matching_risks() -> No
     normal_signals = {item["risk_code"]: item for item in normal.json()["data"]["signals"]}
     assert price_signals["PRICE_DEVIATION"]["matched"] is True
     assert price_signals["QUANTITY_DEVIATION"]["matched"] is True
-    assert price_signals["QUANTITY_DEVIATION"]["facts"]["receipt_variance"] == "1.000"
+    assert price_signals["QUANTITY_DEVIATION"]["facts"]["receipt_variance"] == "1"
     assert blacklist_signals["SUPPLIER_BLACKLIST"]["matched"] is True
     assert blacklist_signals["SUPPLIER_BLACKLIST"]["risk_level"] == "HIGH"
     assert normal_signals["PRICE_DEVIATION"]["matched"] is False

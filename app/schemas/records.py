@@ -10,7 +10,7 @@ class PurchaseRecordItem(BaseModel):
     device_name: str | None
     brand: str | None
     model: str | None
-    quantity: Decimal | None
+    quantity: int | None
     unit: str | None
     status: str
     supplier_id: int | None

@@ -292,7 +292,8 @@ async def test_recommendations_use_real_history_and_filter_active_blacklist() ->
             params={"requirement_id": 91002},
         )
         assert (
-            history_after_blacklist.json()["data"]["items"][0]["blacklist_status"] == "BLACKLISTED"
+            history_after_blacklist.json()["data"]["items"][0]["blacklist_status"]
+            == "BLACKLISTED"
         )
 
         suppliers_after_blacklist = await call(
@@ -304,6 +305,107 @@ async def test_recommendations_use_real_history_and_filter_active_blacklist() ->
         )
         assert suppliers_after_blacklist.json()["data"]["items"] == []
 
+
+@pytest.mark.asyncio
+async def test_recommendation_evidence_rbac_scope_and_blacklist_preservation() -> None:
+    async with async_session_factory() as session:
+        async with session.begin():
+            await session.execute(
+                update(PurchaseRequest)
+                .where(PurchaseRequest.request_id.in_([91006, 91007, 91008, 91009]))
+                .values(device_profession="服务器", device_name="机架服务器")
+            )
+            for request_id in (91006, 91007, 91008, 91009):
+                await session.execute(
+                    update(PurchaseRequest)
+                    .where(PurchaseRequest.request_id == request_id)
+                    .values(request_no=f"REC-EVIDENCE-{request_id}")
+                )
+            await session.execute(
+                update(PurchaseRequest)
+                .where(PurchaseRequest.request_id == 91007)
+                .values(building_id=2)
+            )
+            await session.execute(
+                update(PurchaseExecution)
+                .where(PurchaseExecution.request_id == 91006)
+                .values(supplier_id=92003, supplier_name_snapshot="TEST-永久黑名单供应商")
+            )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        supplier_path = "/api/v1/recommendations/evidence/suppliers"
+        denied_supplier = await call(
+            client,
+            "GET",
+            supplier_path,
+            "test-user-01",
+            params={"device_profession": "服务器"},
+        )
+        denied_contract = await call(
+            client,
+            "GET",
+            "/api/v1/recommendations/evidence/supplier-contracts",
+            "test-user-01",
+            params={"supplier_id": 92001},
+        )
+        denied_warehouse = await call(
+            client,
+            "GET",
+            "/api/v1/recommendations/evidence/warehouses",
+            "test-user-01",
+            params={"device_profession": "服务器"},
+        )
+        assert denied_supplier.status_code == 403
+        assert denied_contract.status_code == 403
+        assert denied_warehouse.status_code == 403
+
+        products = await call(
+            client,
+            "GET",
+            "/api/v1/recommendations/evidence/products",
+            "test-user-01",
+            params={"device_profession": "服务器", "limit": 20},
+        )
+        assert products.status_code == 200, products.text
+        assert products.json()["data"]["items"]
+        assert all(
+            not ({"supplier_id", "actual_unit_price", "contract_type", "tax_rate"} & set(item))
+            for item in products.json()["data"]["items"]
+        )
+
+        suppliers = await call(
+            client,
+            "GET",
+            supplier_path,
+            "test-user-02",
+            params={"device_profession": "服务器", "limit": 20},
+        )
+        assert suppliers.status_code == 200, suppliers.text
+        items = suppliers.json()["data"]["items"]
+        assert 91007 not in {item["reference_id"] for item in items}
+        blacklisted = next(item for item in items if item["supplier_id"] == 92003)
+        assert blacklisted["blacklist_status"] == "BLACKLISTED"
+        assert blacklisted["blacklist_history_count"] >= 1
+
+        contracts = await call(
+            client,
+            "GET",
+            "/api/v1/recommendations/evidence/supplier-contracts",
+            "test-user-03",
+            params={"supplier_id": 92001, "limit": 20},
+        )
+        assert contracts.status_code == 200, contracts.text
+        assert contracts.json()["data"]["items"]
+
+        warehouses = await call(
+            client,
+            "GET",
+            "/api/v1/recommendations/evidence/warehouses",
+            "test-user-04",
+            params={"device_profession": "服务器", "limit": 20},
+        )
+        assert warehouses.status_code == 200, warehouses.text
+        assert warehouses.json()["data"]["items"]
 
 @pytest.mark.asyncio
 async def test_purchase_snapshot_only_updates_master_when_explicitly_confirmed() -> None:

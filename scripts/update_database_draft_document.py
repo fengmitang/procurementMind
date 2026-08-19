@@ -40,7 +40,7 @@ def main() -> None:
     draft_fields = {
         "device_profession": "设备专业或类别",
         "device_name": "设备名称",
-        "quantity": "申请数量，非空时必须大于 0",
+        "quantity": "申请数量，非空时必须为正整数",
         "unit": "计量单位",
         "application_reason": "申请原因",
     }
@@ -62,7 +62,7 @@ def main() -> None:
     note.add_run(
         "草稿创建接口只接收 building_id，因此设备专业、设备名称、数量、单位和申请原因"
         "在 DRAFT 或 REJECTED 编辑阶段允许为空；提交或重新提交楼长审核前，后端必须"
-        "统一校验上述字段已填写完整。数据库 CHECK 约束仅在 quantity 非空时要求其大于 0。"
+        "统一校验上述字段已填写完整。数据库 CHECK 约束仅在 quantity 非空时要求其为正整数。"
     )
 
     document.core_properties.title = "数据中心采购流程自动化 Agent 数据库设计文档 V1.4"

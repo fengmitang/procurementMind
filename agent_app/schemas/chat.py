@@ -9,6 +9,7 @@ from agent_app.investigation.schemas import RiskInvestigationOutput
 from agent_app.models.role_schemas import FormClassificationData, ReviewOutput
 from agent_app.observability.schemas import ExecutionDetails
 from agent_app.rag.schemas import RetrievalResult
+from agent_app.skills.procurement_recommendation.schemas import RecommendationOutput
 
 
 class ChatRequest(BaseModel):
@@ -60,4 +61,5 @@ class ChatData(BaseModel):
     review: ReviewOutput | None = None
     evidence_sufficient: bool = False
     pending_action: PendingAction | None = None
+    recommendation: RecommendationOutput | None = None
     performance: dict[str, int] = Field(default_factory=dict)

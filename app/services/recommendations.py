@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,12 +9,21 @@ from app.repositories.procurement import ProcurementRepository
 from app.repositories.recommendations import RecommendationRepository
 from app.repositories.suppliers import SupplierRepository
 from app.schemas.recommendations import (
+    AmbiguousSupplier,
+    ProductHistoryEvidence,
+    ProductHistoryEvidenceData,
     ProductRecommendationData,
     ProductRecommendationItem,
     PurchaseHistoryItem,
     PurchaseHistoryRecommendationData,
+    SupplierContractEvidence,
+    SupplierContractEvidenceData,
     SupplierRecommendationData,
+    SupplierRecommendationEvidence,
+    SupplierRecommendationEvidenceData,
     SupplierRecommendationItem,
+    WarehouseRecommendationEvidence,
+    WarehouseRecommendationEvidenceData,
 )
 from app.services.permissions import require_any_role
 
@@ -160,6 +169,165 @@ class RecommendationService:
             if len(items) >= limit:
                 break
         return SupplierRecommendationData(items=items)
+
+    async def product_evidence(
+        self,
+        session: AsyncSession,
+        current_user: CurrentUser,
+        **filters,
+    ) -> ProductHistoryEvidenceData:
+        require_any_role(
+            current_user,
+            RoleCode.APPLICANT.value,
+            RoleCode.BUILDING_MANAGER.value,
+            RoleCode.PURCHASER.value,
+            RoleCode.ADMIN.value,
+        )
+        rows = await self.repository.product_evidence(
+            session, **self._datetime_filters(filters, "purchased")
+        )
+        return ProductHistoryEvidenceData(
+            items=[
+                ProductHistoryEvidence(
+                    reference_id=request.request_id,
+                    device_profession=request.device_profession,
+                    device_name=request.device_name,
+                    brand=request.brand,
+                    model=request.model,
+                    purchased_at=execution.purchased_at,
+                )
+                for request, execution in rows
+            ]
+        )
+
+    async def supplier_evidence(
+        self,
+        session: AsyncSession,
+        current_user: CurrentUser,
+        **filters,
+    ) -> SupplierRecommendationEvidenceData:
+        require_any_role(current_user, RoleCode.BUILDING_MANAGER.value, RoleCode.ADMIN.value)
+        building_ids = (
+            None
+            if current_user.has_any_role(RoleCode.ADMIN.value)
+            else set(current_user.building_ids)
+        )
+        rows = await self.repository.supplier_evidence(
+            session,
+            building_ids=building_ids,
+            **self._datetime_filters(filters, "purchased"),
+        )
+        request_ids = {request.request_id for request, _ in rows}
+        supplier_ids = {execution.supplier_id for _, execution in rows}
+        reviews = await self.repository.latest_completed_reviews(session, request_ids)
+        blacklist = await self.repository.supplier_blacklist_summaries(
+            session, supplier_ids, datetime.now()
+        )
+        suppliers = await self.repository.suppliers_by_ids(session, supplier_ids)
+        items = []
+        for request, execution in rows:
+            review = reviews.get(request.request_id)
+            supplier = suppliers.get(execution.supplier_id)
+            status, history_count = blacklist.get(execution.supplier_id, ("NORMAL", 0))
+            contact_info = (
+                review.supplier_contact_info
+                if review and review.supplier_contact_info
+                else supplier.contract_contact_info
+                if supplier
+                else None
+            )
+            items.append(
+                SupplierRecommendationEvidence(
+                    reference_id=request.request_id,
+                    supplier_id=execution.supplier_id,
+                    supplier_name=execution.supplier_name_snapshot,
+                    supplier_contact_name=(review.supplier_contact_name if review else None),
+                    supplier_contact_info=contact_info,
+                    actual_unit_price=execution.actual_unit_price,
+                    contract_type=review.contract_type if review else None,
+                    payment_method=review.payment_method if review else None,
+                    blacklist_status=status,
+                    blacklist_history_count=history_count,
+                    purchased_at=execution.purchased_at,
+                )
+            )
+        return SupplierRecommendationEvidenceData(items=items)
+
+    async def supplier_contract_evidence(
+        self,
+        session: AsyncSession,
+        current_user: CurrentUser,
+        **filters,
+    ) -> SupplierContractEvidenceData:
+        require_any_role(current_user, RoleCode.PURCHASER.value, RoleCode.ADMIN.value)
+        supplier_id = filters.get("supplier_id")
+        supplier_name = filters.get("supplier_name")
+        if supplier_id is None and supplier_name:
+            matches = await self.repository.matching_suppliers(session, supplier_name)
+            if len(matches) > 1:
+                return SupplierContractEvidenceData(
+                    items=[],
+                    ambiguous_suppliers=[
+                        AmbiguousSupplier(
+                            supplier_id=item.supplier_id, supplier_name=item.supplier_name
+                        )
+                        for item in matches
+                    ],
+                )
+            if len(matches) == 1:
+                filters["supplier_id"] = matches[0].supplier_id
+                filters["supplier_name"] = None
+        rows = await self.repository.supplier_contract_evidence(
+            session, **self._datetime_filters(filters, "purchased")
+        )
+        return SupplierContractEvidenceData(
+            items=[
+                SupplierContractEvidence(
+                    reference_id=execution.request_id,
+                    supplier_id=execution.supplier_id,
+                    supplier_name=execution.supplier_name_snapshot,
+                    tax_rate=execution.tax_rate,
+                    contract_contact_info=execution.contract_contact_info_snapshot,
+                    purchased_at=execution.purchased_at,
+                )
+                for (execution,) in rows
+            ]
+        )
+
+    async def warehouse_evidence(
+        self,
+        session: AsyncSession,
+        current_user: CurrentUser,
+        **filters,
+    ) -> WarehouseRecommendationEvidenceData:
+        require_any_role(
+            current_user, RoleCode.WAREHOUSE_MANAGER.value, RoleCode.ADMIN.value
+        )
+        rows = await self.repository.warehouse_evidence(
+            session, **self._datetime_filters(filters, "received")
+        )
+        return WarehouseRecommendationEvidenceData(
+            items=[
+                WarehouseRecommendationEvidence(
+                    reference_id=request.request_id,
+                    device_profession=request.device_profession,
+                    device_name=request.device_name,
+                    warehouse_location=receipt.warehouse_location,
+                    received_quantity=receipt.received_quantity,
+                    received_at=receipt.received_at,
+                )
+                for request, receipt in rows
+            ]
+        )
+
+    @staticmethod
+    def _datetime_filters(filters: dict, prefix: str) -> dict:
+        values = dict(filters)
+        start = values.pop(f"{prefix}_from", None)
+        end = values.pop(f"{prefix}_to", None)
+        values[f"{prefix}_from"] = datetime.combine(start, time.min) if start else None
+        values[f"{prefix}_to"] = datetime.combine(end, time.max) if end else None
+        return values
 
     async def _get_visible_request(
         self,

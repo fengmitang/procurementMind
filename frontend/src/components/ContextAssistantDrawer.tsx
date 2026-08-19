@@ -41,15 +41,18 @@ const rolePrompts = {
     ['review', '帮我检查审批方案', '结合制度检查当前未提交草稿', <RobotOutlined />],
   ],
   PURCHASER: [
+    ['recommendation', '推荐历史税率和合同联系方式', '参考该供应商的真实历史采购执行记录', <HistoryOutlined />],
     ['review', '查看审批建议', '读取当前采购单的审批信息', <FileSearchOutlined />],
     ['history', '查询当前采购单相似案例的供应商历史', '查询供应商历史履约记录', <HistoryOutlined />],
     ['compare', '比较供应商', '比较候选供应商的真实数据', <ShopOutlined />],
     ['price', '查询当前采购单相似案例的历史成交价格', '查看相似设备历史价格', <FileSearchOutlined />],
   ],
   WAREHOUSE_MANAGER: [
+    ['recommendation', '推荐历史入库位置', '参考同类设备的真实历史入库记录', <HistoryOutlined />],
     ['status', '核对入库要求', '查询当前采购单和入库规则', <FileSearchOutlined />],
   ],
   APPLICANT: [
+    ['recommendation', '推荐历史品牌和型号', '参考同类设备的真实历史采购记录', <HistoryOutlined />],
     ['status', '查看当前进度', '查询当前采购单实时状态', <FileSearchOutlined />],
   ],
 } as const

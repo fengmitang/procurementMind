@@ -88,6 +88,26 @@ TOOL_CATALOG = {
             ToolFactKind.DERIVED_ANALYSIS,
         ),
         ToolDescriptor(
+            "search_product_history_evidence",
+            ToolNamespace.PRODUCT,
+            ToolFactKind.DERIVED_ANALYSIS,
+        ),
+        ToolDescriptor(
+            "search_supplier_recommendation_evidence",
+            ToolNamespace.SUPPLIER,
+            ToolFactKind.DERIVED_ANALYSIS,
+        ),
+        ToolDescriptor(
+            "search_supplier_contract_evidence",
+            ToolNamespace.SUPPLIER,
+            ToolFactKind.DERIVED_ANALYSIS,
+        ),
+        ToolDescriptor(
+            "search_warehouse_evidence",
+            ToolNamespace.PROCUREMENT,
+            ToolFactKind.DERIVED_ANALYSIS,
+        ),
+        ToolDescriptor(
             "get_supplier_performance",
             ToolNamespace.SUPPLIER,
             ToolFactKind.DERIVED_ANALYSIS,

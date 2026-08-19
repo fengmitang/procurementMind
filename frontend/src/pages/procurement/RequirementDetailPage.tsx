@@ -13,6 +13,7 @@ import { ContextAssistantDrawer } from '../../components/ContextAssistantDrawer'
 import { actionLabel, enumLabel } from '../../constants/business'
 import { useIdentity } from '../../features/identity/IdentityProvider'
 import type { AgentFormSuggestion, RequirementDetail, TimelineItem } from '../../types/api'
+import { validatePositiveIntegerQuantity } from '../../utils/quantity'
 import './RequirementDetailPage.css'
 
 const actionToken = () => `WEB-${crypto.randomUUID()}`
@@ -319,7 +320,7 @@ export function RequirementDetailPage() {
       {modal === 'warehouse' && <>
         <Alert type={Number(receivedQuantity) < requestedQuantity ? 'warning' : 'info'} showIcon title={`申请数量：${requestedQuantity} ${data.applicant_fields.unit || ''}`} description={Number(receivedQuantity) < requestedQuantity ? '实际入库数量较少，请在入库备注中说明原因。' : '实际入库数量达到申请数量。'} style={{ marginBottom: 16 }} />
         <Form.Item name="warehouse_location" label="入库位置" rules={[{ required: true, message: '请填写入库位置' }]}><Input /></Form.Item>
-        <Form.Item name="received_quantity" label="实际入库数量" rules={[{ required: true, message: '请填写实际入库数量' }]}><InputNumber min={0.001} precision={3} style={{ width: '100%' }} /></Form.Item>
+        <Form.Item name="received_quantity" label="实际入库数量" rules={[{ required: true, message: '请填写实际入库数量' }, { validator: (_, value) => validatePositiveIntegerQuantity(value) }]}><InputNumber min={1} step={1} style={{ width: '100%' }} /></Form.Item>
         <Form.Item name="receipt_remark" label="入库备注" dependencies={['received_quantity']} rules={[({ getFieldValue }) => ({ validator: (_, value) => Number(getFieldValue('received_quantity')) < requestedQuantity && !String(value || '').trim() ? Promise.reject(new Error('实际入库数量少于申请数量，请说明差异原因')) : Promise.resolve() })]}><Input.TextArea rows={3} /></Form.Item>
       </>}
     </Form></Modal>

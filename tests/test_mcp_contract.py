@@ -20,6 +20,10 @@ EXPECTED_TOOLS = {
     "get_requirement_risk_signals",
     "get_similar_cases",
     "get_supplier_performance",
+    "search_product_history_evidence",
+    "search_supplier_recommendation_evidence",
+    "search_supplier_contract_evidence",
+    "search_warehouse_evidence",
 }
 
 

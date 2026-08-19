@@ -110,7 +110,7 @@ class PurchaseAnalysisItem(BaseModel):
     device_name: str | None
     brand: str | None
     model: str | None
-    quantity: Decimal | None
+    quantity: int | None
     unit: str | None
     status: str
     current_handler_name: str | None
@@ -120,7 +120,7 @@ class PurchaseAnalysisItem(BaseModel):
     actual_total_price: Decimal | None
     expected_arrival_date: date | None
     purchased_at: datetime | None
-    received_quantity: Decimal | None
+    received_quantity: int | None
     received_at: datetime | None
     created_at: datetime
     completed_at: datetime | None
@@ -211,7 +211,7 @@ class SimilarCaseItem(BaseModel):
     device_name: str | None
     brand: str | None
     model: str | None
-    quantity: Decimal | None
+    quantity: int | None
     building_id: int
     building_name: str
     supplier_id: int | None

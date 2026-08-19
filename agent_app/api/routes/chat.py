@@ -174,6 +174,7 @@ def _build_chat_data(
         review=result.review,
         evidence_sufficient=result.evidence_sufficient,
         pending_action=result.pending_action,
+        recommendation=result.recommendation,
         performance=performance or {},
     )
 
@@ -280,6 +281,11 @@ def _persisted_message_data(result: GraphRunResult) -> dict:
         "form_classification": (
             result.form_classification.model_dump(mode="json")
             if result.form_classification is not None
+            else None
+        ),
+        "recommendation": (
+            result.recommendation.model_dump(mode="json")
+            if result.recommendation is not None
             else None
         ),
     }

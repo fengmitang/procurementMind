@@ -129,6 +129,19 @@ async def test_complete_procurement_flow_with_rejection_and_resubmission() -> No
             assert incomplete_submit.json()["code"] == "MISSING_REQUIRED_FIELDS"
 
             applicant_path = f"/api/v1/requirements/{request_id}/applicant-fields"
+            invalid_applicant_quantity = await call(
+                client,
+                "PATCH",
+                applicant_path,
+                "test-user-01",
+                json={
+                    "expected_version": 0,
+                    "fields": {"quantity": 2.5},
+                },
+            )
+            assert invalid_applicant_quantity.status_code == 422
+            assert invalid_applicant_quantity.json()["code"] == "VALIDATION_ERROR"
+
             applicant_saved = await call(
                 client,
                 "PATCH",
@@ -324,6 +337,22 @@ async def test_complete_procurement_flow_with_rejection_and_resubmission() -> No
             assert sent_to_warehouse.json()["data"]["status"] == "PENDING_WAREHOUSE"
 
             receipt_path = f"/api/v1/requirements/{request_id}/warehouse-fields"
+            invalid_received_quantity = await call(
+                client,
+                "PATCH",
+                receipt_path,
+                "test-user-04",
+                json={
+                    "expected_version": 10,
+                    "fields": {
+                        "warehouse_location": "TEST-E2E-A区",
+                        "received_quantity": 1.5,
+                    },
+                },
+            )
+            assert invalid_received_quantity.status_code == 422
+            assert invalid_received_quantity.json()["code"] == "VALIDATION_ERROR"
+
             missing_short_receipt_remark = await call(
                 client,
                 "PATCH",
@@ -388,7 +417,7 @@ async def test_complete_procurement_flow_with_rejection_and_resubmission() -> No
             assert all(item["reviewer_name"] for item in detail_data["review_records"])
             assert detail_data["initiator"]["name"]
             assert detail_data["initiator"]["created_at"]
-            assert detail_data["warehouse_receipt"]["received_quantity"] == "4.000"
+            assert detail_data["warehouse_receipt"]["received_quantity"] == 4
             assert detail_data["warehouse_receipt"]["warehouse_name"]
             assert detail_data["purchase_execution"]["bank_account"] == "TEST****2001"
             assert detail_data["purchase_execution"]["purchaser_name"]

@@ -6,6 +6,7 @@ import { PageShell } from '../../components/PageShell'
 import { DEVICE_PROFESSIONS } from '../../constants/business'
 import { useIdentity } from '../../features/identity/IdentityProvider'
 import type { ApplicantFields } from '../../types/api'
+import { validatePositiveIntegerQuantity } from '../../utils/quantity'
 
 const actionToken=()=>`WEB-${crypto.randomUUID()}`
 
@@ -20,7 +21,7 @@ export function RequirementFormPage(){
     {!canCreate&&!editingId&&<Alert type="warning" showIcon title="当前身份无法创建采购申请" description="真实后端要求 APPLICANT 角色并归属具体楼宇。当前测试身份不满足该条件；前端不会绕过权限或伪造保存结果。"/>}
     <Form form={form} layout="vertical" disabled={loading||(!canCreate&&!editingId)}>
       <Card title="基础信息" className="form-card"><Form.Item name="building_id" label="所属楼宇" rules={[{required:true,message:'请选择所属楼宇'}]}><Select options={user.buildings.map((b)=>({value:b.building_id,label:b.building_name}))}/></Form.Item></Card>
-      <Card title="设备信息" className="form-card"><div className="form-grid"><Form.Item name="device_profession" label="设备类型" rules={[{required:true,message:'请选择设备类型'}]}><Select options={DEVICE_PROFESSIONS.map((value)=>({value,label:value}))}/></Form.Item><Form.Item name="device_name" label="设备名称" rules={[{required:true,message:'请输入设备名称'}]}><Input maxLength={200}/></Form.Item><Form.Item name="brand" label="品牌"><Input maxLength={100}/></Form.Item><Form.Item name="model" label="规格型号"><Input maxLength={150}/></Form.Item><Form.Item name="quantity" label="数量" rules={[{required:true,message:'请输入数量'}]}><InputNumber min={0.001} precision={3} style={{width:'100%'}}/></Form.Item><Form.Item name="unit" label="单位" rules={[{required:true,message:'请输入单位'}]}><Input maxLength={30}/></Form.Item></div></Card>
+      <Card title="设备信息" className="form-card"><div className="form-grid"><Form.Item name="device_profession" label="设备类型" rules={[{required:true,message:'请选择设备类型'}]}><Select options={DEVICE_PROFESSIONS.map((value)=>({value,label:value}))}/></Form.Item><Form.Item name="device_name" label="设备名称" rules={[{required:true,message:'请输入设备名称'}]}><Input maxLength={200}/></Form.Item><Form.Item name="brand" label="品牌"><Input maxLength={100}/></Form.Item><Form.Item name="model" label="规格型号"><Input maxLength={150}/></Form.Item><Form.Item name="quantity" label="数量" rules={[{required:true,message:'请输入数量'},{validator:(_,value)=>validatePositiveIntegerQuantity(value)}]}><InputNumber min={1} step={1} style={{width:'100%'}}/></Form.Item><Form.Item name="unit" label="单位" rules={[{required:true,message:'请输入单位'}]}><Input maxLength={30}/></Form.Item></div></Card>
       <Card title="采购需求说明" className="form-card"><Form.Item name="application_reason" label="申请原因" rules={[{required:true,message:'请说明申请原因'}]}><Input.TextArea rows={5}/></Form.Item><Form.Item name="applicant_remark" label="补充说明"><Input.TextArea rows={3}/></Form.Item></Card>
       <div className="form-actions"><Space><Button onClick={()=>navigate('/requirements')}>取消</Button><Button icon={<SaveOutlined/>} loading={saving} onClick={save}>保存草稿</Button><Button type="primary" icon={<SendOutlined/>} loading={saving} onClick={submit}>提交楼长审核</Button></Space></div>
     </Form>

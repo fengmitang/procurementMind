@@ -14,9 +14,17 @@ _COMPLEX_TERMS = (
     "平均",
     "履约",
     "相似案例",
-    "推荐供应商",
     "哪些采购",
     "发起的采购",
+)
+_RECOMMENDATION_TERMS = (
+    "推荐",
+    "历史推荐",
+    "参考历史",
+    "历史参考",
+    "以前一般",
+    "历史上一般",
+    "以前用什么",
 )
 _KNOWLEDGE_TERMS = (
     "制度",
@@ -68,15 +76,20 @@ class FirstVersionRouter:
         normalized = re.sub(r"\s+", "", message.lower())
         has_risk = any(term in normalized for term in _RISK_TERMS)
         has_form_prefill = any(term in normalized for term in _FORM_PREFILL_TERMS)
+        has_recommendation = any(term in normalized for term in _RECOMMENDATION_TERMS)
         has_complex = any(term in normalized for term in _COMPLEX_TERMS)
         has_knowledge = any(term in normalized for term in _KNOWLEDGE_TERMS)
         has_realtime = any(term in normalized for term in _REALTIME_TERMS) or bool(
             self.extract_requirement_id(message)
         )
+        if has_recommendation:
+            return RouteType.RECOMMENDATION
         if has_form_prefill:
             return RouteType.FORM_PREFILL
         if has_complex and any(marker in normalized for marker in ("排除黑名单", "剔除黑名单")):
             return RouteType.COMPLEX_QUERY
+        if has_knowledge and has_risk and not has_realtime:
+            return RouteType.KNOWLEDGE
         if has_risk:
             return RouteType.RISK_INVESTIGATION
         if has_complex:
@@ -96,10 +109,21 @@ class FirstVersionRouter:
             *_KNOWLEDGE_TERMS,
             *_REALTIME_TERMS,
             *_FORM_PREFILL_TERMS,
+            *_RECOMMENDATION_TERMS,
         )
         return not any(term in normalized for term in terms) and not bool(
             self.extract_requirement_id(message)
         )
+
+    @staticmethod
+    def is_recommendation(message: str) -> bool:
+        normalized = re.sub(r"\s+", "", message.lower())
+        return any(term in normalized for term in _RECOMMENDATION_TERMS)
+
+    @staticmethod
+    def is_recommendation_confirmation(message: str) -> bool:
+        normalized = re.sub(r"[\s，。！？!?]+", "", message.lower())
+        return normalized in {"需要", "需要推荐", "需要历史推荐"}
 
     @staticmethod
     def extract_requirement_id(message: str) -> int | None:

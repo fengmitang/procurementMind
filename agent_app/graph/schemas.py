@@ -15,6 +15,7 @@ from agent_app.schemas.backend import (
     ConversationStateData,
     CurrentUserData,
 )
+from agent_app.skills.procurement_recommendation.schemas import RecommendationOutput
 
 
 class RouteType(StrEnum):
@@ -24,6 +25,7 @@ class RouteType(StrEnum):
     COMPLEX_QUERY = "COMPLEX_QUERY"
     RISK_INVESTIGATION = "RISK_INVESTIGATION"
     FORM_PREFILL = "FORM_PREFILL"
+    RECOMMENDATION = "RECOMMENDATION"
 
 
 class TraceEventType(StrEnum):
@@ -129,6 +131,7 @@ class GraphRunResult(BaseModel):
     form_draft: dict[str, JsonValue] | None = None
     form_missing_fields: list[str] = Field(default_factory=list)
     form_classification: FormClassificationData | None = None
+    recommendation: RecommendationOutput | None = None
 
 
 class HITLActionType(StrEnum):
@@ -188,3 +191,4 @@ class GraphState(TypedDict, total=False):
     form_draft: dict[str, JsonValue] | None
     form_missing_fields: list[str]
     form_classification: dict[str, JsonValue] | None
+    recommendation: dict[str, JsonValue] | None

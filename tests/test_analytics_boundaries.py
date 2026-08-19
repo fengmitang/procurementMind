@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime
-from decimal import Decimal
 
 import pytest
 
@@ -75,7 +74,7 @@ def test_all_risk_rules_have_stable_non_matching_case() -> None:
         device_name="完全独立设备",
         brand="UNIQUE",
         model="UNIQUE-1",
-        quantity=Decimal("1"),
+        quantity=1,
         status="DRAFT",
         created_at=datetime(2026, 8, 5, 9, 0, 0),
     )

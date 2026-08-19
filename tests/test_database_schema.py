@@ -79,3 +79,39 @@ async def test_initial_database_schema_and_seed_data() -> None:
     assert current_user.startswith("procurement_mind_app@")
     assert roles == EXPECTED_ROLES
     assert buildings == EXPECTED_BUILDINGS
+
+
+@pytest.mark.asyncio
+async def test_device_quantity_columns_are_integer_and_existing_values_are_integral() -> None:
+    async with engine.connect() as connection:
+        columns = (
+            await connection.execute(
+                text(
+                    "SELECT table_name, column_name, data_type "
+                    "FROM information_schema.columns "
+                    "WHERE table_schema = DATABASE() AND "
+                    "(table_name, column_name) IN "
+                    "(('purchase_request', 'quantity'), "
+                    "('warehouse_receipt', 'received_quantity'))"
+                )
+            )
+        ).tuples().all()
+        fractional_requests = await connection.scalar(
+            text(
+                "SELECT COUNT(*) FROM purchase_request "
+                "WHERE quantity IS NOT NULL AND quantity <> FLOOR(quantity)"
+            )
+        )
+        fractional_receipts = await connection.scalar(
+            text(
+                "SELECT COUNT(*) FROM warehouse_receipt "
+                "WHERE received_quantity <> FLOOR(received_quantity)"
+            )
+        )
+
+    assert set(columns) == {
+        ("purchase_request", "quantity", "bigint"),
+        ("warehouse_receipt", "received_quantity", "bigint"),
+    }
+    assert fractional_requests == 0
+    assert fractional_receipts == 0

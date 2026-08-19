@@ -90,6 +90,9 @@ class GraphMemoryMapper:
             }
         if result.review is not None:
             collected_data["last_review"] = result.review.model_dump(mode="json")
+        last_recommendations = list(previous.last_recommendations if previous else [])
+        if result.recommendation is not None:
+            last_recommendations = [result.recommendation.compact_state()]
         if result.pending_action is not None:
             collected_data["pending_action"] = result.pending_action.model_dump(mode="json")
         else:
@@ -142,5 +145,5 @@ class GraphMemoryMapper:
             ),
             awaiting_confirmation=result.pending_action is not None,
             recent_messages=recent_messages[-10:],
-            last_recommendations=list(previous.last_recommendations if previous else []),
+            last_recommendations=last_recommendations,
         )

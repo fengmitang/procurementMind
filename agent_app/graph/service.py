@@ -16,6 +16,7 @@ from agent_app.analysis.service import AnalysisAgentService
 from agent_app.core.config import AgentSettings
 from agent_app.device_terms.service import DeviceTermSearchService
 from agent_app.domain.device_catalog import get_device_catalog
+from agent_app.domain.quantity_parser import QuantityParseStatus, parse_quantity_with_unit
 from agent_app.graph.memory import GraphMemoryMapper
 from agent_app.graph.router import FirstVersionRouter
 from agent_app.graph.schemas import (
@@ -52,7 +53,11 @@ from agent_app.rag.schemas import RetrievalFilters, RetrievalResult
 from agent_app.resilience import AsyncCircuitBreaker
 from agent_app.resilience.mcp import CircuitProtectedMCPClient
 from agent_app.schemas.analytics import AnalyticsQueryInput
-from agent_app.schemas.backend import BackendIdentity
+from agent_app.schemas.backend import BackendIdentity, CurrentUserData
+from agent_app.skills import SkillExecutionContext, SkillRegistry
+from agent_app.skills.procurement_recommendation import ProcurementRecommendationSkill
+from agent_app.skills.procurement_recommendation.schemas import RecommendationOutput
+from agent_app.skills.procurement_recommendation.service import render_recommendation
 
 
 class MCPToolClient(Protocol):
@@ -102,6 +107,7 @@ class ProcurementGraphService:
         risk_investigation: RiskInvestigationService | None = None,
         knowledge_retriever: KnowledgeRetrieverProtocol | None = None,
         model_roles: StructuredModelRoles | None = None,
+        skill_registry: SkillRegistry | None = None,
     ) -> None:
         self.settings = settings
         get_device_catalog()
@@ -115,6 +121,9 @@ class ProcurementGraphService:
         )
         self.knowledge_retriever = knowledge_retriever
         self.model_roles = model_roles
+        self.skill_registry = skill_registry or SkillRegistry()
+        if skill_registry is None:
+            self.skill_registry.register(ProcurementRecommendationSkill())
         self._stream_handler: ContextVar[GraphStreamHandler | None] = ContextVar(
             f"graph_stream_handler_{id(self)}", default=None
         )
@@ -133,6 +142,9 @@ class ProcurementGraphService:
     def set_device_term_search(self, service: DeviceTermSearchService) -> None:
         if hasattr(self.analysis_agent, "set_device_term_search"):
             self.analysis_agent.set_device_term_search(service)
+        recommendation_skill = self.skill_registry.resolve(RouteType.RECOMMENDATION.value)
+        if hasattr(recommendation_skill, "set_device_term_search"):
+            recommendation_skill.set_device_term_search(service)
 
     async def run(
         self,
@@ -193,6 +205,7 @@ class ProcurementGraphService:
                 if restored_form_classification is not None
                 else None
             ),
+            "recommendation": None,
         }
         invoke_config = {
             "recursion_limit": max(15, self.settings.max_execution_steps + 8),
@@ -249,6 +262,11 @@ class ProcurementGraphService:
                 if final.get("form_classification")
                 else None
             ),
+            recommendation=(
+                RecommendationOutput.model_validate(final["recommendation"])
+                if final.get("recommendation")
+                else None
+            ),
         )
 
     def _build_graph(self):
@@ -260,6 +278,7 @@ class ProcurementGraphService:
         builder.add_node("analysis", self._analysis_node)
         builder.add_node("risk_investigation", self._risk_investigation_node)
         builder.add_node("form_prefill", self._form_prefill_node)
+        builder.add_node("recommendation", self._recommendation_node)
         builder.add_node("sufficiency_check", self._sufficiency_node)
         builder.add_node("compose", self._answer_node)
         builder.add_node("review", self._review_node)
@@ -276,6 +295,7 @@ class ProcurementGraphService:
                 "analysis": "analysis",
                 "risk_investigation": "risk_investigation",
                 "form_prefill": "form_prefill",
+                "recommendation": "recommendation",
             },
         )
         builder.add_conditional_edges(
@@ -287,6 +307,7 @@ class ProcurementGraphService:
         builder.add_edge("analysis", "sufficiency_check")
         builder.add_edge("risk_investigation", "sufficiency_check")
         builder.add_edge("form_prefill", "sufficiency_check")
+        builder.add_edge("recommendation", "sufficiency_check")
         builder.add_edge("sufficiency_check", "compose")
         builder.add_edge("compose", "review")
         builder.add_edge("review", "confirmation")
@@ -331,13 +352,21 @@ class ProcurementGraphService:
                 route = self.router.classify(state["message"])
         else:
             route = self.router.classify(state["message"])
-        if continuing_form_prefill:
+        recommendation_confirmation = bool(
+            state.get("form_draft")
+            and not state.get("form_missing_fields")
+            and self.router.is_recommendation_confirmation(state["message"])
+        )
+        if recommendation_confirmation:
+            route = RouteType.RECOMMENDATION
+        elif continuing_form_prefill and not self.router.is_recommendation(state["message"]):
             route = RouteType.FORM_PREFILL
         requirement_id = None
         if route in {
             RouteType.REALTIME_BUSINESS,
             RouteType.HYBRID,
             RouteType.RISK_INVESTIGATION,
+            RouteType.RECOMMENDATION,
         }:
             requirement_id = self.router.extract_requirement_id(state["message"])
         model_metadata = (
@@ -385,6 +414,8 @@ class ProcurementGraphService:
             return "analysis"
         if state["route"] == RouteType.RISK_INVESTIGATION.value:
             return "risk_investigation"
+        if state["route"] == RouteType.RECOMMENDATION.value:
+            return "recommendation"
         return "form_prefill"
 
     @staticmethod
@@ -519,6 +550,8 @@ class ProcurementGraphService:
         else:
             extracted = self._extract_form_fields(state["message"])
 
+        quantity_result = parse_quantity_with_unit(state["message"])
+
         extracted_fields = extracted.model_dump(
             mode="json",
             exclude={
@@ -529,6 +562,11 @@ class ProcurementGraphService:
             exclude_none=True,
         )
         draft.update(extracted_fields)
+        if quantity_result.status is QuantityParseStatus.VALID:
+            draft["quantity"] = quantity_result.quantity
+            draft["unit"] = quantity_result.unit
+        elif quantity_result.status is QuantityParseStatus.INVALID:
+            draft.pop("quantity", None)
         classification = extracted.classification()
         if (
             extracted.classification_status is DeviceClassificationStatus.UNKNOWN
@@ -663,16 +701,99 @@ class ProcurementGraphService:
         brand_match = re.search(r"(浪潮|华为|联想|戴尔|惠普|新华三|H3C)", normalized, re.IGNORECASE)
         if brand_match:
             fields["brand"] = brand_match.group(1)
-        quantity_match = re.search(r"(\d+(?:\.\d+)?)\s*(台|套|个|批|件)", message)
-        if quantity_match:
-            fields["quantity"] = float(quantity_match.group(1))
-            fields["unit"] = quantity_match.group(2)
+        quantity_result = parse_quantity_with_unit(message)
+        if quantity_result.status is QuantityParseStatus.VALID:
+            fields["quantity"] = quantity_result.quantity
+            fields["unit"] = quantity_result.unit
         reason_match = re.search(r"(?:原因|用途|用于|因为)[：:，,]?(.{2,200})", message)
         if reason_match:
             fields["application_reason"] = (
                 reason_match.group(1).lstrip("是为：:，, ").strip("。；; ")
             )
         return FormExtractOutput.model_validate(fields)
+
+    async def _recommendation_node(self, state: GraphState) -> dict[str, Any]:
+        await self._emit_stream("querying_business_data", {"message": "正在检索历史推荐依据"})
+        if state["step_count"] >= self.settings.max_execution_steps:
+            return self._boundary_failure(state, "GRAPH_STEP_LIMIT", "已达到最大执行步骤")
+        started = time.perf_counter()
+        skill = self.skill_registry.resolve(RouteType.RECOMMENDATION.value)
+        result = await skill.execute(
+            SkillExecutionContext(
+                message=state["message"],
+                current_user=CurrentUserData.model_validate(state["current_user"]),
+                identity=BackendIdentity.model_validate(state["identity"]),
+                trace_id=state["trace_id"],
+                purchase_request_id=state.get("purchase_request_id"),
+                mcp_client_factory=self.mcp_client_factory,
+                settings=self.settings,
+                form_draft=dict(state["form_draft"]) if state.get("form_draft") else None,
+            )
+        )
+        output = result.output
+        tool_results = [
+            ToolExecution(
+                name=call.name,
+                arguments=call.arguments,
+                success=call.success,
+                code=call.code,
+                source=call.source,
+                trace_id=call.trace_id,
+                duration_ms=call.duration_ms,
+                data=call.data,
+            )
+            for call in result.tool_calls
+        ]
+        evidence = [
+            Evidence(
+                evidence_type="RECOMMENDATION_HISTORY",
+                source=item.source_tool,
+                reference_id=str(item.reference_id),
+                data=item.model_dump(mode="json"),
+            )
+            for item in output.evidence
+        ]
+        trace = TraceEvent(
+            event_type=TraceEventType.GRAPH,
+            name="skill.procurement_recommendation",
+            status="CLARIFICATION" if output.clarification_required else "SUCCESS",
+            duration_ms=self._elapsed_ms(started),
+            result={
+                "skill_id": output.skill_id,
+                "skill_version": output.skill_version,
+                "profile": output.profile.value if output.profile else None,
+                "recommendation_type": (
+                    output.recommendation_type.value if output.recommendation_type else None
+                ),
+                "retrieval_stages_used": output.retrieval_stages_used,
+                "candidate_count": len(output.candidates),
+                "evidence_count": len(output.evidence),
+            },
+        )
+        errors = [
+            GraphError(
+                code=call.code,
+                message=f"推荐依据工具调用失败：{call.name}",
+                source=call.name,
+            ).model_dump(mode="json")
+            for call in result.tool_calls
+            if not call.success
+        ]
+        return {
+            "recommendation": output.model_dump(mode="json"),
+            "tool_results": [
+                *state["tool_results"],
+                *(item.model_dump(mode="json") for item in tool_results),
+            ],
+            "evidence": [
+                *state["evidence"],
+                *(item.model_dump(mode="json") for item in evidence),
+            ],
+            "errors": [*state["errors"], *errors],
+            "tool_call_count": state["tool_call_count"] + len(tool_results),
+            "step_count": state["step_count"] + 1,
+            "trace_events": [*state["trace_events"], trace.model_dump(mode="json")],
+        }
 
     async def _sufficiency_node(self, state: GraphState) -> dict[str, Any]:
         route = RouteType(state["route"])
@@ -690,6 +811,7 @@ class ProcurementGraphService:
             RouteType.COMPLEX_QUERY: state.get("analysis") is not None,
             RouteType.RISK_INVESTIGATION: state.get("risk_investigation") is not None,
             RouteType.FORM_PREFILL: bool(state.get("form_draft")),
+            RouteType.RECOMMENDATION: state.get("recommendation") is not None,
         }[route]
         trace = TraceEvent(
             event_type=TraceEventType.GRAPH,
@@ -1392,7 +1514,11 @@ class ProcurementGraphService:
         )
         deterministic_completion_applied = False
         model_error: StructuredModelRunError | None = None
-        if self.model_roles is not None and state["evidence"]:
+        if (
+            self.model_roles is not None
+            and state["evidence"]
+            and RouteType(state["route"]) is not RouteType.RECOMMENDATION
+        ):
             try:
                 if self._stream_handler.get() is None:
                     compose_output = await self.model_roles.compose(
@@ -1416,7 +1542,10 @@ class ProcurementGraphService:
                 model_error = exc
         model_metadata = (
             self.model_roles.trace_metadata(ModelPurpose.COMPOSE)
-            if self.model_roles is not None and model_error is None and state["evidence"]
+            if self.model_roles is not None
+            and model_error is None
+            and state["evidence"]
+            and RouteType(state["route"]) is not RouteType.RECOMMENDATION
             else self._model_error_metadata(model_error)
         )
         trace = TraceEvent(
@@ -1427,7 +1556,10 @@ class ProcurementGraphService:
             result={
                 "reply_length": len(reply),
                 "model_used": (
-                    self.model_roles is not None and bool(state["evidence"]) and model_error is None
+                    self.model_roles is not None
+                    and bool(state["evidence"])
+                    and model_error is None
+                    and RouteType(state["route"]) is not RouteType.RECOMMENDATION
                 ),
                 "citation_ids": [item.citation_id for item in compose_output.citations],
                 "deterministic_completion_applied": deterministic_completion_applied,
@@ -1451,7 +1583,12 @@ class ProcurementGraphService:
                 source="model_compose",
             )
             updates["errors"] = [*state["errors"], error.model_dump(mode="json")]
-        if self.model_roles is None or not state["evidence"] or model_error is not None:
+        if (
+            self.model_roles is None
+            or not state["evidence"]
+            or model_error is not None
+            or RouteType(state["route"]) is RouteType.RECOMMENDATION
+        ):
             await self._emit_answer_delta(reply)
         return updates
 
@@ -1487,6 +1624,8 @@ class ProcurementGraphService:
             return AnalysisOutput.model_validate(state["analysis"]).answer
         if route is RouteType.FORM_PREFILL:
             missing = state.get("form_missing_fields", [])
+            if parse_quantity_with_unit(state["message"]).status is QuantityParseStatus.INVALID:
+                return "设备采购数量需要填写正整数，请确认具体数量。"
             classification = (
                 FormClassificationData.model_validate(state["form_classification"])
                 if state.get("form_classification")
@@ -1529,7 +1668,12 @@ class ProcurementGraphService:
                 )
             return (
                 "采购申请草稿已经整理完成。请先核对下方字段；如需修改，直接告诉我。\n\n"
+                "如需参考历史采购记录，可回复“需要推荐”。\n\n"
                 "**确认无误后再点击“创建草稿”。这一步只会在业务系统中创建草稿，不会提交审批。**"
+            )
+        if route is RouteType.RECOMMENDATION and state.get("recommendation"):
+            return render_recommendation(
+                RecommendationOutput.model_validate(state["recommendation"])
             )
         knowledge_reply = self._knowledge_answer(state)
         realtime_reply = self._realtime_answer(state)

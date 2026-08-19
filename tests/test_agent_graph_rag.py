@@ -399,6 +399,44 @@ async def test_complete_natural_purchase_request_generates_persisted_create_draf
 
 
 @pytest.mark.asyncio
+async def test_chinese_quantity_generates_integer_form_draft_without_quantity_followup() -> None:
+    restored = ConversationStateData(
+        conversation_id=1,
+        current_action="CHAT",
+        collected_data={"form_draft": {"building_id": 1, "building_name": "一号楼"}},
+    )
+    request = applicant_request("我要采购两台服务器，用于替换故障设备").model_copy(
+        update={"restored_state": restored}
+    )
+    result = await ProcurementGraphService(settings()).run(request)
+
+    assert result.form_draft is not None
+    assert result.form_draft["quantity"] == 2
+    assert result.form_draft["unit"] == "台"
+    assert "quantity" not in result.form_missing_fields
+    assert result.pending_action is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "我要采购2.5台服务器，用于替换故障设备",
+        "我要采购几台服务器，用于替换故障设备",
+        "我要采购两三台服务器，用于替换故障设备",
+    ],
+)
+async def test_invalid_or_fuzzy_quantity_never_generates_pending_action(message: str) -> None:
+    result = await ProcurementGraphService(settings()).run(applicant_request(message))
+
+    assert result.pending_action is None
+    assert result.form_draft is not None
+    assert "quantity" not in result.form_draft
+    assert "quantity" in result.form_missing_fields
+    assert "正整数" in result.reply
+
+
+@pytest.mark.asyncio
 async def test_configured_model_roles_are_used_for_route_and_compose() -> None:
     adapter = ScriptedModelAdapter(
         [

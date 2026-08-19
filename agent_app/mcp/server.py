@@ -134,6 +134,82 @@ async def recommend_suppliers(
     )
 
 
+@mcp.tool(**tool_registration("search_product_history_evidence"))
+async def search_product_history_evidence(
+    device_profession: DeviceType | None = None,
+    device_names: list[LimitedText] | None = None,
+    purchased_from: date | None = None,
+    purchased_to: date | None = None,
+    limit: Annotated[int, Field(ge=1, le=20)] = 20,
+) -> MCPToolResponse:
+    """返回需求人允许查看的品牌型号历史依据，不包含供应商或价格。"""
+    return await _tools().search_product_history_evidence(
+        device_profession=device_profession,
+        device_names=device_names or [],
+        purchased_from=purchased_from.isoformat() if purchased_from else None,
+        purchased_to=purchased_to.isoformat() if purchased_to else None,
+        limit=limit,
+    )
+
+
+@mcp.tool(**tool_registration("search_supplier_recommendation_evidence"))
+async def search_supplier_recommendation_evidence(
+    device_profession: DeviceType | None = None,
+    device_names: list[LimitedText] | None = None,
+    brand: LimitedText | None = None,
+    model: LimitedText | None = None,
+    purchased_from: date | None = None,
+    purchased_to: date | None = None,
+    limit: Annotated[int, Field(ge=1, le=20)] = 20,
+) -> MCPToolResponse:
+    """返回楼长权限范围内的供应商历史依据；黑名单记录保留并显式标记。"""
+    return await _tools().search_supplier_recommendation_evidence(
+        device_profession=device_profession,
+        device_names=device_names or [],
+        brand=brand,
+        model=model,
+        purchased_from=purchased_from.isoformat() if purchased_from else None,
+        purchased_to=purchased_to.isoformat() if purchased_to else None,
+        limit=limit,
+    )
+
+
+@mcp.tool(**tool_registration("search_supplier_contract_evidence"))
+async def search_supplier_contract_evidence(
+    supplier_id: PositiveId | None = None,
+    supplier_name: LimitedText | None = None,
+    purchased_from: date | None = None,
+    purchased_to: date | None = None,
+    limit: Annotated[int, Field(ge=1, le=20)] = 20,
+) -> MCPToolResponse:
+    """返回采购员可见的供应商历史税率和合同联系方式依据。"""
+    return await _tools().search_supplier_contract_evidence(
+        supplier_id=supplier_id,
+        supplier_name=supplier_name,
+        purchased_from=purchased_from.isoformat() if purchased_from else None,
+        purchased_to=purchased_to.isoformat() if purchased_to else None,
+        limit=limit,
+    )
+
+
+@mcp.tool(**tool_registration("search_warehouse_evidence"))
+async def search_warehouse_evidence(
+    device_profession: DeviceType | None = None,
+    device_names: list[LimitedText] | None = None,
+    received_from: date | None = None,
+    received_to: date | None = None,
+    limit: Annotated[int, Field(ge=1, le=20)] = 20,
+) -> MCPToolResponse:
+    """返回仓管可见的历史入库位置依据，不推断库存或库容。"""
+    return await _tools().search_warehouse_evidence(
+        device_profession=device_profession,
+        device_names=device_names or [],
+        received_from=received_from.isoformat() if received_from else None,
+        received_to=received_to.isoformat() if received_to else None,
+        limit=limit,
+    )
+
+
 @mcp.tool(**tool_registration("query_purchase_analytics"))
 async def query_purchase_analytics(query: AnalyticsQueryInput) -> MCPToolResponse:
     """执行白名单采购查询和聚合；不接受 SQL 或任意字段。"""

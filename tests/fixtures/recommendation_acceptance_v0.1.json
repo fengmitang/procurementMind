@@ -1,0 +1,18 @@
+{
+  "version": "0.1",
+  "cases": [
+    {"case_id": "rec-requester-brand-model", "role": "APPLICANT", "question": "给我推荐一下服务器品牌型号", "expected_profile": "REQUESTER"},
+    {"case_id": "rec-requester-denied-supplier", "role": "APPLICANT", "question": "给我推荐几个服务器供应商", "expected": "PERMISSION_GUIDANCE"},
+    {"case_id": "rec-manager-supplier", "role": "BUILDING_MANAGER", "question": "推荐服务器供应商", "expected_profile": "BUILDING_MANAGER"},
+    {"case_id": "rec-manager-two-months", "role": "BUILDING_MANAGER", "question": "参考近两个月历史记录推荐服务器供应商", "expected_profile": "BUILDING_MANAGER"},
+    {"case_id": "rec-purchaser-contract", "role": "PURCHASER", "question": "供应商为TEST-常规供应商A，推荐历史税率和合同联系方式", "expected_profile": "PURCHASER"},
+    {"case_id": "rec-warehouse", "role": "WAREHOUSE_MANAGER", "question": "这种服务器以前一般入哪个仓库？", "expected_profile": "WAREHOUSE_MANAGER"},
+    {"case_id": "rec-multi-explicit", "role": "APPLICANT+BUILDING_MANAGER", "question": "推荐品牌和型号", "expected_profile": "REQUESTER"},
+    {"case_id": "rec-multi-no-context", "role": "APPLICANT+BUILDING_MANAGER", "question": "给我历史参考", "expected": "CLARIFICATION"},
+    {"case_id": "rec-admin-no-type", "role": "ADMIN", "question": "给我历史推荐", "expected": "CLARIFICATION"},
+    {"case_id": "rec-ambiguous-device", "role": "APPLICANT", "question": "推荐机架式计算节点的品牌型号", "expected": "CLARIFICATION"},
+    {"case_id": "rec-nonstandard-device", "role": "APPLICANT", "question": "推荐服务器专业下机架式计算节点的品牌型号", "expected_profile": "REQUESTER"},
+    {"case_id": "rec-no-data", "role": "APPLICANT", "question": "推荐冷水机组品牌型号", "expected": "NO_RESULT_OR_HISTORY"},
+    {"case_id": "rec-blacklist", "role": "BUILDING_MANAGER", "question": "推荐服务器供应商，保留历史黑名单提示", "expected": "BLACKLIST_WARNING_WITHOUT_RERANK"}
+  ]
+}

@@ -31,6 +31,7 @@ from agent_app.schemas.backend import (
     FieldsSaveData,
     MessageCreatedData,
     MessageListData,
+    ProductHistoryEvidenceData,
     ProductRecommendationData,
     PurchaseHistoryRecommendationData,
     PurchaseRecordListData,
@@ -38,8 +39,11 @@ from agent_app.schemas.backend import (
     RequirementMutationData,
     SnapshotSavedData,
     StateSavedData,
+    SupplierContractEvidenceData,
     SupplierRecommendationData,
+    SupplierRecommendationEvidenceData,
     TimelineData,
+    WarehouseRecommendationEvidenceData,
 )
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -216,6 +220,58 @@ class ProcurementBackendClient:
             trace_id=trace_id,
             identity=identity,
             params={"requirement_id": requirement_id, "limit": limit},
+            retryable=True,
+        )
+
+    async def search_product_history_evidence(
+        self, identity: BackendIdentity, trace_id: str, **params
+    ) -> ProductHistoryEvidenceData:
+        return await self._request(
+            "GET",
+            "/api/v1/recommendations/evidence/products",
+            ProductHistoryEvidenceData,
+            trace_id=trace_id,
+            identity=identity,
+            params={key: value for key, value in params.items() if value not in (None, [])},
+            retryable=True,
+        )
+
+    async def search_supplier_recommendation_evidence(
+        self, identity: BackendIdentity, trace_id: str, **params
+    ) -> SupplierRecommendationEvidenceData:
+        return await self._request(
+            "GET",
+            "/api/v1/recommendations/evidence/suppliers",
+            SupplierRecommendationEvidenceData,
+            trace_id=trace_id,
+            identity=identity,
+            params={key: value for key, value in params.items() if value not in (None, [])},
+            retryable=True,
+        )
+
+    async def search_supplier_contract_evidence(
+        self, identity: BackendIdentity, trace_id: str, **params
+    ) -> SupplierContractEvidenceData:
+        return await self._request(
+            "GET",
+            "/api/v1/recommendations/evidence/supplier-contracts",
+            SupplierContractEvidenceData,
+            trace_id=trace_id,
+            identity=identity,
+            params={key: value for key, value in params.items() if value is not None},
+            retryable=True,
+        )
+
+    async def search_warehouse_evidence(
+        self, identity: BackendIdentity, trace_id: str, **params
+    ) -> WarehouseRecommendationEvidenceData:
+        return await self._request(
+            "GET",
+            "/api/v1/recommendations/evidence/warehouses",
+            WarehouseRecommendationEvidenceData,
+            trace_id=trace_id,
+            identity=identity,
+            params={key: value for key, value in params.items() if value not in (None, [])},
             retryable=True,
         )
 

@@ -36,7 +36,7 @@ class ApplicantFields(BaseModel):
     device_name: str | None = Field(default=None, max_length=200)
     brand: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=150)
-    quantity: Decimal | None = Field(default=None, gt=0, max_digits=18, decimal_places=3)
+    quantity: int | None = Field(default=None, gt=0)
     unit: str | None = Field(default=None, max_length=30)
     application_reason: str | None = None
     applicant_remark: str | None = None
@@ -120,7 +120,7 @@ class SavePurchaseFieldsRequest(BaseModel):
 
 class WarehouseFields(BaseModel):
     warehouse_location: str = Field(min_length=1, max_length=255)
-    received_quantity: Decimal = Field(gt=0, max_digits=18, decimal_places=3)
+    received_quantity: int = Field(gt=0)
     receipt_remark: str | None = None
 
 
@@ -198,7 +198,7 @@ class RequirementListQuery(BaseModel):
 
 
 class PurchaseFieldsValidation(BaseModel):
-    quantity: Decimal
+    quantity: int = Field(gt=0)
     unit_price: Decimal
     supplied_total: Decimal | None
 

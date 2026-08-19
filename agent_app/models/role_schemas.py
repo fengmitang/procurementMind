@@ -12,6 +12,7 @@ class ModelRoute(StrEnum):
     COMPLEX_QUERY = "COMPLEX_QUERY"
     RISK_INVESTIGATION = "RISK_INVESTIGATION"
     FORM_PREFILL = "FORM_PREFILL"
+    RECOMMENDATION = "RECOMMENDATION"
 
 
 class RouterOutput(BaseModel):
@@ -32,6 +33,7 @@ class RouterOutput(BaseModel):
             ModelRoute.COMPLEX_QUERY: (True, False),
             ModelRoute.RISK_INVESTIGATION: (True, True),
             ModelRoute.FORM_PREFILL: (False, False),
+            ModelRoute.RECOMMENDATION: (True, False),
         }[self.route]
         if (self.requires_realtime_tools, self.requires_knowledge) != expected:
             raise ValueError("路由和所需能力标记不一致")
@@ -66,7 +68,7 @@ class FormExtractOutput(FormClassificationData):
     device_profession: DeviceType | None = None
     brand: str | None = Field(default=None, min_length=1, max_length=100)
     model: str | None = Field(default=None, min_length=1, max_length=150)
-    quantity: float | None = Field(default=None, gt=0)
+    quantity: int | None = Field(default=None, gt=0)
     unit: str | None = Field(default=None, min_length=1, max_length=30)
     application_reason: str | None = Field(default=None, min_length=1)
     applicant_remark: str | None = Field(default=None, min_length=1)

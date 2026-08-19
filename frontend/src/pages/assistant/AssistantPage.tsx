@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Actions, Bubble, Conversations, Prompts, Sender, Sources, Welcome } from '@ant-design/x'
 import { Alert, App, Avatar, Button, Card, Descriptions, Space, Spin, Tag, Typography } from 'antd'
-import { CopyOutlined, FileTextOutlined, MessageOutlined, PlusOutlined, RobotOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
+import { CopyOutlined, FileTextOutlined, HistoryOutlined, MessageOutlined, PlusOutlined, RobotOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import ReactMarkdown from 'react-markdown'
 import { useNavigate } from 'react-router-dom'
 import { useIdentity } from '../../features/identity/IdentityProvider'
 import { enumLabel, fieldLabel, localizeBusinessText } from '../../constants/business'
+import { RECOMMENDATION_QUICK_MESSAGE } from '../../constants/assistant'
 import type { AgentChatData, AgentMessage, BusinessResult, KnowledgeSource, PendingAction } from '../../types/api'
 import './AssistantPage.css'
 
@@ -27,6 +28,7 @@ const prompts = [
   { key: 'knowledge', icon: <FileTextOutlined />, label: '采购申请被驳回后应该怎么办？', description: '查询制度与流程规则' },
   { key: 'realtime', icon: <ToolOutlined />, label: '我的采购申请目前进展怎么样？', description: '读取实时采购数据' },
   { key: 'draft', icon: <MessageOutlined />, label: '我要采购一批浪潮服务器', description: '创建采购申请草稿' },
+  { key: 'recommendation', icon: <HistoryOutlined />, label: '给我参考一下以前的采购推荐', description: '按当前角色查看历史参考' },
 ]
 
 const toolLabels: Record<string, string> = {
@@ -190,6 +192,6 @@ export function AssistantPage() {
       <div className="message-scroll" ref={scrollRef} onScroll={(event) => { const target = event.currentTarget; stickToBottom.current = target.scrollHeight - target.scrollTop - target.clientHeight < 100 }}>
         {!active?.loaded ? <div className="center-state"><Spin description="正在加载消息" /></div> : !active.messages.length ? <div className="assistant-welcome"><Welcome icon={<Avatar size={50} icon={<RobotOutlined />} />} title="你好，我是采购智能助手" description="我可以查询采购规则和真实业务进度，也可以协助整理采购申请草稿。正式操作都会先请你确认。" /><Prompts title="你可以这样问" items={prompts} wrap onItemClick={({ data }) => submit(String(data.label))} /></div> : <Bubble.List items={bubbleItems} role={{ user: { placement: 'end', avatar: <Avatar icon={<UserOutlined />} />, variant: 'filled' }, ai: { placement: 'start', avatar: <Avatar icon={<RobotOutlined />} />, variant: 'outlined', contentRender: (_, info) => { const item = info.extraInfo?.item as AgentMessage; return <AssistantContent message={item} onHitlDone={(actionId, text) => updateConversation(active.key, (value) => ({ ...value, messages: [...value.messages.map((entry) => entry.data?.pending_action?.action_id === actionId ? { ...entry, data: { ...entry.data, pending_action: null } } : entry), { id: crypto.randomUUID(), role: 'assistant', content: text, createdAt: new Date().toISOString(), status: 'success' }] }))} /> } } }} />}
       </div>
-      <div className="sender-wrap"><Sender value={input} onChange={setInput} loading={busy} placeholder="询问采购规则、采购单进度，或描述采购需求…" onSubmit={submit} /><Typography.Text type="secondary">正式业务操作会在你确认后执行。</Typography.Text></div>
+      <div className="sender-wrap"><Space><Button icon={<HistoryOutlined />} disabled={busy} onClick={() => void submit(RECOMMENDATION_QUICK_MESSAGE)}>推荐</Button><Typography.Text type="secondary">推荐仅参考历史记录，不会执行采购操作。</Typography.Text></Space><Sender value={input} onChange={setInput} loading={busy} placeholder="询问采购规则、采购单进度，或描述采购需求…" onSubmit={submit} /><Typography.Text type="secondary">正式业务操作会在你确认后执行。</Typography.Text></div>
     </section></div>
 }

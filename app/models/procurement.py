@@ -81,7 +81,7 @@ class PurchaseRequest(Base):
     device_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     model: Mapped[str | None] = mapped_column(String(150), nullable=True)
-    quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 3), nullable=True)
+    quantity: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     unit: Mapped[str | None] = mapped_column(String(30), nullable=True)
     application_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     applicant_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -239,7 +239,7 @@ class WarehouseReceipt(Base):
     warehouse_name_snapshot: Mapped[str] = mapped_column(String(100), nullable=False)
     warehouse_mobile_snapshot: Mapped[str | None] = mapped_column(String(64), nullable=True)
     warehouse_location: Mapped[str] = mapped_column(String(255), nullable=False)
-    received_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 3), nullable=False)
+    received_quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
     receipt_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 

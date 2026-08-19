@@ -38,7 +38,7 @@ export interface ApplicantFields {
   device_name?: string | null
   brand?: string | null
   model?: string | null
-  quantity?: number | string | null
+  quantity?: number | null
   unit?: string | null
   application_reason?: string | null
   applicant_remark?: string | null
@@ -86,7 +86,7 @@ export interface PurchaseRecord {
   device_name: string | null
   brand: string | null
   model: string | null
-  quantity: string | null
+  quantity: number | null
   unit: string | null
   status: string
   supplier_id: number | null
@@ -211,6 +211,7 @@ export interface AgentChatData {
   risk_investigation?: Record<string, any> | null
   review?: Record<string, any> | null
   pending_action?: PendingAction | null
+  recommendation?: Record<string, any> | null
   execution?: { tools?: Record<string, any>[]; errors?: Record<string, any>[]; [key: string]: any }
 }
 

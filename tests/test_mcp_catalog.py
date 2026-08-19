@@ -24,7 +24,7 @@ def context() -> MCPTrustedContext:
 
 
 def test_catalog_logically_separates_all_whitelisted_tools() -> None:
-    assert len(TOOL_CATALOG) == 11
+    assert len(TOOL_CATALOG) == 15
     assert {item.namespace for item in TOOL_CATALOG.values()} == {
         ToolNamespace.PROCUREMENT,
         ToolNamespace.PRODUCT,
@@ -33,6 +33,7 @@ def test_catalog_logically_separates_all_whitelisted_tools() -> None:
     }
     assert get_tool_descriptor("get_purchase_request").fact_kind is ToolFactKind.REALTIME_FACT
     assert get_tool_descriptor("query_purchase_analytics").namespace is ToolNamespace.ANALYTICS
+    assert get_tool_descriptor("search_product_history_evidence").namespace is ToolNamespace.PRODUCT
 
 
 def test_catalog_rejects_unregistered_tools() -> None:

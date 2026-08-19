@@ -63,7 +63,7 @@ class ApplicantFieldsData(BaseModel):
     device_name: str | None
     brand: str | None
     model: str | None
-    quantity: Decimal | None
+    quantity: int | None
     unit: str | None
     application_reason: str | None
     applicant_remark: str | None
@@ -107,7 +107,7 @@ class PurchaseExecutionData(BaseModel):
 
 class WarehouseReceiptData(BaseModel):
     warehouse_location: str
-    received_quantity: Decimal
+    received_quantity: int
     receipt_remark: str | None
     received_at: datetime
 
@@ -152,7 +152,7 @@ class PurchaseRecordItem(BaseModel):
     device_name: str | None
     brand: str | None
     model: str | None
-    quantity: Decimal | None
+    quantity: int | None
     unit: str | None
     status: str
     supplier_id: int | None
@@ -189,7 +189,7 @@ class PurchaseHistoryItem(BaseModel):
     device_name: str
     brand: str | None
     model: str | None
-    quantity: Decimal
+    quantity: int
     supplier_id: int
     supplier_name: str
     actual_total_price: Decimal
@@ -211,6 +211,23 @@ class SupplierRecommendationItem(BaseModel):
 
 class SupplierRecommendationData(BaseModel):
     items: list[SupplierRecommendationItem]
+
+
+class ProductHistoryEvidenceData(BaseModel):
+    items: list[dict[str, JsonValue]]
+
+
+class SupplierRecommendationEvidenceData(BaseModel):
+    items: list[dict[str, JsonValue]]
+
+
+class SupplierContractEvidenceData(BaseModel):
+    items: list[dict[str, JsonValue]]
+    ambiguous_suppliers: list[dict[str, JsonValue]] = Field(default_factory=list)
+
+
+class WarehouseRecommendationEvidenceData(BaseModel):
+    items: list[dict[str, JsonValue]]
 
 
 class ActiveConversationData(BaseModel):

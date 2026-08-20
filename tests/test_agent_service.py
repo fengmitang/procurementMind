@@ -1,11 +1,14 @@
 import asyncio
 from datetime import datetime
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
+from agent_app.api.routes.actions import _identity as resolve_action_identity
 from agent_app.clients.errors import ProcurementBackendUnavailable
 from agent_app.core.config import AgentSettings
+from agent_app.hitl.schemas import ActionDecisionRequest
 from agent_app.main import create_agent_app
 from agent_app.models.runtime import ModelRuntimeStatus
 from agent_app.schemas.backend import (
@@ -26,6 +29,7 @@ TEST_SECRET = "test-agent-gateway-secret-value"
 class FakeProcurementBackendClient:
     def __init__(self, *, ready: bool = True) -> None:
         self.ready = ready
+        self.identities = []
         self.messages: list[tuple[str, str]] = []
         self.saved_states = []
         self.snapshot_reasons: list[str] = []
@@ -36,6 +40,7 @@ class FakeProcurementBackendClient:
         return BackendReadinessData(status="ready", mysql="ok", redis="ok")
 
     async def get_current_user(self, identity, _: str) -> CurrentUserData:
+        self.identities.append(identity)
         return CurrentUserData(
             employee_id=90001,
             employee_no="TEST-E001",
@@ -108,6 +113,24 @@ def settings() -> AgentSettings:
         identity_gateway_secret=TEST_SECRET,
         procurement_backend_url="http://backend.test",
     )
+
+
+def test_hitl_action_identity_accepts_allowlisted_full_demo_user() -> None:
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(agent_settings=settings()))
+    )
+    payload = ActionDecisionRequest(
+        platform_type="WEB",
+        platform_user_id="demo_user_001",
+        conversation_id=1,
+        action_id="a" * 32,
+        confirmation_token="t" * 32,
+    )
+
+    identity = resolve_action_identity(payload, request)
+
+    assert identity.platform_type == "WEB"
+    assert identity.platform_user_id == "demo_user_001"
 
 
 class SlowGraphService:
@@ -327,6 +350,29 @@ async def test_chat_rejects_non_test_identity_in_development() -> None:
     assert response.status_code == 403
     assert response.json()["code"] == "DEVELOPMENT_IDENTITY_REQUIRED"
     assert backend.messages == []
+
+
+@pytest.mark.asyncio
+async def test_chat_accepts_allowlisted_full_demo_web_identity() -> None:
+    backend = FakeProcurementBackendClient()
+    application = create_agent_app(settings(), backend)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=application),
+        base_url="http://agent.test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/chat",
+            json={
+                "platform_type": "WEB",
+                "platform_user_id": "demo_user_001",
+                "message": "查询采购单",
+            },
+        )
+
+    assert response.status_code == 200
+    assert backend.identities
+    assert backend.identities[0].platform_type == "WEB"
+    assert backend.identities[0].platform_user_id == "demo_user_001"
 
 
 @pytest.mark.asyncio

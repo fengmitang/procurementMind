@@ -8,6 +8,7 @@ from agent_app.core.request_context import trace_id_context
 from agent_app.hitl.schemas import ActionDecisionRequest, ActionResolutionData
 from agent_app.schemas.backend import BackendIdentity
 from agent_app.schemas.common import AgentApiResponse
+from app.core.development_identities import is_allowed_development_identity
 
 router = APIRouter(prefix="/chat/actions", tags=["agent-hitl"])
 
@@ -16,10 +17,13 @@ def _identity(payload: ActionDecisionRequest, request: Request) -> BackendIdenti
     settings = request.app.state.agent_settings
     if settings.agent_app_env.lower() != "development":
         raise AgentError("IDENTITY_SESSION_REQUIRED", "当前环境必须通过服务端登录会话提供身份", 401)
-    if payload.platform_type != "TEST_PLATFORM":
+    if not is_allowed_development_identity(
+        payload.platform_type,
+        payload.platform_user_id,
+    ):
         raise AgentError(
             "DEVELOPMENT_IDENTITY_REQUIRED",
-            "开发环境确认接口只允许 TEST_PLATFORM 身份",
+            "开发环境确认接口只允许受控测试身份",
             403,
         )
     return BackendIdentity(

@@ -103,6 +103,50 @@ async def test_demo_proxy_uses_normal_identity_and_permissions() -> None:
     assert forbidden.json()["code"] == "PERMISSION_DENIED"
 
 
+def test_demo_identity_resolver_distinguishes_test_and_full_demo_users() -> None:
+    test_identity = demo_route.resolve_demo_identity("test-user-01")
+    demo_identity = demo_route.resolve_demo_identity("demo_user_001")
+
+    assert test_identity.platform_type == "TEST_PLATFORM"
+    assert demo_identity.platform_type == "WEB"
+    assert demo_identity.platform_user_id == "demo_user_001"
+
+
+@pytest.mark.parametrize("platform_user_id", ["demo_user_999", "random-user", "test-user-99"])
+def test_demo_identity_resolver_rejects_unknown_users(platform_user_id: str) -> None:
+    with pytest.raises(Exception) as exc_info:
+        demo_route.resolve_demo_identity(platform_user_id)
+
+    assert getattr(exc_info.value, "code", None) == "DEMO_USER_NOT_ALLOWED"
+
+
+@pytest.mark.asyncio
+async def test_demo_proxy_signs_full_demo_user_as_web(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+    original_signer = demo_route.build_gateway_signature
+
+    def capture_signature(**kwargs):
+        captured["platform_type"] = kwargs["platform_type"]
+        captured["platform_user_id"] = kwargs["platform_user_id"]
+        return original_signer(**kwargs)
+
+    monkeypatch.setattr(demo_route, "build_gateway_signature", capture_signature)
+    await demo_request(
+        {
+            "platform_user_id": "demo_user_001",
+            "method": "GET",
+            "path": "/api/v1/users/me",
+        }
+    )
+
+    assert captured == {
+        "platform_type": "WEB",
+        "platform_user_id": "demo_user_001",
+    }
+
+
 @pytest.mark.asyncio
 async def test_demo_proxy_rejects_unknown_users_and_unsafe_paths() -> None:
     unknown_user = await demo_request(
@@ -134,9 +178,11 @@ async def test_demo_agent_chat_forwards_only_allowlisted_identity(
 
     async def fake_forward(
         payload: DemoAgentChatRequest,
+        identity: demo_route.DemoIdentity,
         trace_id: str,
     ) -> tuple[int, dict]:
         captured["payload"] = payload
+        captured["identity"] = identity
         captured["trace_id"] = trace_id
         return 200, {
             "success": True,
@@ -175,6 +221,7 @@ async def test_demo_agent_chat_forwards_only_allowlisted_identity(
     assert isinstance(forwarded, DemoAgentChatRequest)
     assert forwarded.platform_user_id == "test-user-02"
     assert forwarded.message == "统计本月服务器采购金额"
+    assert captured["identity"].platform_type == "TEST_PLATFORM"
     assert isinstance(captured["trace_id"], str)
     assert captured["trace_id"]
 
@@ -187,6 +234,7 @@ async def test_demo_agent_chat_rejects_unknown_user_before_forwarding(
 
     async def fake_forward(
         payload: DemoAgentChatRequest,
+        identity: demo_route.DemoIdentity,
         trace_id: str,
     ) -> tuple[int, dict]:
         nonlocal called
@@ -217,8 +265,8 @@ async def test_demo_agent_action_forwards_only_confirm_or_cancel(
 ) -> None:
     captured: dict[str, object] = {}
 
-    async def fake_forward(payload, action: str, trace_id: str) -> tuple[int, dict]:
-        captured.update(payload=payload, action=action, trace_id=trace_id)
+    async def fake_forward(payload, identity, action: str, trace_id: str) -> tuple[int, dict]:
+        captured.update(payload=payload, identity=identity, action=action, trace_id=trace_id)
         return 200, {"success": True, "data": {"status": "CANCELED"}}
 
     monkeypatch.setattr(demo_route, "forward_agent_action", fake_forward)
@@ -236,6 +284,98 @@ async def test_demo_agent_action_forwards_only_confirm_or_cancel(
     assert forbidden.status_code == 404
     assert captured["action"] == "cancel"
     assert isinstance(captured["payload"], DemoAgentActionRequest)
+    assert captured["identity"].platform_type == "TEST_PLATFORM"
+
+
+@pytest.mark.asyncio
+async def test_demo_agent_chat_and_actions_forward_web_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[demo_route.DemoIdentity] = []
+
+    async def fake_chat(payload, identity, trace_id):
+        captured.append(identity)
+        return 200, {"success": True, "data": {"status": "ACCEPTED"}}
+
+    async def fake_action(payload, identity, action, trace_id):
+        captured.append(identity)
+        return 200, {"success": True, "data": {"status": "CONFIRMED"}}
+
+    monkeypatch.setattr(demo_route, "forward_agent_chat", fake_chat)
+    monkeypatch.setattr(demo_route, "forward_agent_action", fake_action)
+    action_body = {
+        "platform_user_id": "demo_user_001",
+        "conversation_id": 41,
+        "action_id": "a" * 32,
+        "confirmation_token": "t" * 32,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        chat = await client.post(
+            "/demo-api/agent-chat",
+            json={"platform_user_id": "demo_user_001", "message": "查询采购数据"},
+        )
+        confirm = await client.post("/demo-api/agent-actions/confirm", json=action_body)
+        cancel = await client.post("/demo-api/agent-actions/cancel", json=action_body)
+
+    assert chat.status_code == confirm.status_code == cancel.status_code == 200
+    assert [identity.platform_type for identity in captured] == ["WEB", "WEB", "WEB"]
+
+
+def test_agent_payload_builders_use_resolved_web_identity_for_chat_stream_and_actions() -> None:
+    identity = demo_route.resolve_demo_identity("demo_user_002")
+    chat = DemoAgentChatRequest(platform_user_id="demo_user_002", message="推荐供应商")
+    action = DemoAgentActionRequest(
+        platform_user_id="demo_user_002",
+        conversation_id=41,
+        action_id="a" * 32,
+        confirmation_token="t" * 32,
+    )
+
+    assert demo_route.build_agent_chat_payload(chat, identity)["platform_type"] == "WEB"
+    assert demo_route.build_agent_action_payload(action, identity)["platform_type"] == "WEB"
+
+
+@pytest.mark.asyncio
+async def test_demo_agent_stream_forwards_web_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeUpstream:
+        is_error = False
+        status_code = 200
+
+        async def aiter_bytes(self):
+            yield b'event: completed\ndata: {"success": true}\n\n'
+
+    class FakeStreamContext:
+        async def __aenter__(self):
+            return FakeUpstream()
+
+        async def __aexit__(self, *_):
+            return None
+
+    class FakeAgentClient:
+        def __init__(self, **_):
+            pass
+
+        def stream(self, method, path, **kwargs):
+            captured.update(method=method, path=path, json=kwargs["json"])
+            return FakeStreamContext()
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(demo_route, "AsyncClient", FakeAgentClient)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/demo-api/agent-chat/stream",
+            json={"platform_user_id": "demo_user_002", "message": "推荐供应商"},
+        )
+
+    assert response.status_code == 200
+    assert captured["json"]["platform_type"] == "WEB"
+    assert captured["json"]["platform_user_id"] == "demo_user_002"
 
 
 def test_frontend_does_not_contain_gateway_credentials() -> None:

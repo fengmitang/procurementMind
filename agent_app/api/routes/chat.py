@@ -28,6 +28,7 @@ from agent_app.schemas.chat import (
     KnowledgeSourceData,
 )
 from agent_app.schemas.common import AgentApiResponse
+from app.core.development_identities import is_allowed_development_identity
 
 router = APIRouter(prefix="/chat", tags=["agent-chat"])
 logger = logging.getLogger(__name__)
@@ -53,10 +54,13 @@ def _validate_development_identity(payload: ChatRequest, request: Request) -> No
             "当前环境必须通过服务端登录会话提供身份",
             401,
         )
-    if payload.platform_type != "TEST_PLATFORM":
+    if not is_allowed_development_identity(
+        payload.platform_type,
+        payload.platform_user_id,
+    ):
         raise AgentError(
             "DEVELOPMENT_IDENTITY_REQUIRED",
-            "开发环境聊天接口只允许 TEST_PLATFORM 身份",
+            "开发环境聊天接口只允许受控测试身份",
             403,
         )
 

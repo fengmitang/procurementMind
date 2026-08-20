@@ -5,12 +5,20 @@ import { AgentClient } from '../../services/agentClient'
 import type { CurrentUser, RoleCode } from '../../types/api'
 
 export const demoIdentities = [
-  { id: 'test-user-01', label: '测试需求人', role: 'APPLICANT' },
-  { id: 'test-user-02', label: '一号楼楼长', role: 'BUILDING_MANAGER' },
-  { id: 'test-user-03', label: '测试采购员', role: 'PURCHASER' },
-  { id: 'test-user-04', label: '仓库管理员', role: 'WAREHOUSE_MANAGER' },
-  { id: 'test-user-05', label: '系统管理员', role: 'ADMIN' },
-  { id: 'test-user-07', label: '二号楼楼长', role: 'BUILDING_MANAGER' },
+  { id: 'demo_user_001', label: '演示需求人', description: 'Full Demo' },
+  { id: 'demo_user_002', label: '演示楼长', description: 'Full Demo' },
+  { id: 'demo_user_003', label: '演示采购员', description: 'Full Demo' },
+  { id: 'demo_user_004', label: '演示仓管员', description: 'Full Demo' },
+  { id: 'demo_user_005', label: '演示管理员', description: 'Full Demo' },
+  { id: 'demo_user_006', label: '演示需求人兼楼长', description: 'Full Demo' },
+  { id: 'demo_user_007', label: '演示楼长兼采购员', description: 'Full Demo' },
+  { id: 'demo_user_008', label: '演示采购员兼仓管', description: 'Full Demo' },
+  { id: 'test-user-01', label: '测试需求人', description: 'TEST Fixture' },
+  { id: 'test-user-02', label: '一号楼楼长', description: 'TEST Fixture' },
+  { id: 'test-user-03', label: '测试采购员', description: 'TEST Fixture' },
+  { id: 'test-user-04', label: '仓库管理员', description: 'TEST Fixture' },
+  { id: 'test-user-05', label: '系统管理员', description: 'TEST Fixture' },
+  { id: 'test-user-07', label: '二号楼楼长', description: 'TEST Fixture' },
 ] as const
 
 interface IdentityValue {

@@ -62,7 +62,10 @@ export function AppLayout() {
       <Header className="app-header">
         <button className="collapse-button" aria-label="折叠菜单" onClick={() => setCollapsed((value) => !value)}>{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}</button>
         <div className="header-spacer" />
-        {import.meta.env.DEV && <Select className="identity-switch" value={platformUserId} onChange={switchIdentity} options={demoIdentities.map((item) => ({ value: item.id, label: `${item.label} · ${item.role}` }))} />}
+        {import.meta.env.DEV && <Select className="identity-switch" value={platformUserId} onChange={switchIdentity} options={[
+          { label: 'Full Demo', options: demoIdentities.filter((item) => item.description === 'Full Demo').map((item) => ({ value: item.id, label: `${item.label}（Full Demo）` })) },
+          { label: 'Legacy TEST', options: demoIdentities.filter((item) => item.description === 'TEST Fixture').map((item) => ({ value: item.id, label: `${item.label}（TEST Fixture）` })) },
+        ]} />}
         <Dropdown menu={{ items: userMenu }} placement="bottomRight"><Space className="user-trigger">
           <Avatar style={{ background: '#1677ff' }}>{user.name.slice(0, 1)}</Avatar>
           <div className="user-copy"><Typography.Text strong>{user.name}</Typography.Text><span>{user.roles.map((role) => role.role_name).join(' / ')}</span></div>

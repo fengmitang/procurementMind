@@ -52,6 +52,7 @@ from agent_app.models.runner import StructuredModelRunError
 from agent_app.rag.schemas import RetrievalFilters, RetrievalResult
 from agent_app.resilience import AsyncCircuitBreaker
 from agent_app.resilience.mcp import CircuitProtectedMCPClient
+from agent_app.review_policy import ReviewPolicyDecision, ReviewPolicyResult, ReviewPolicyV1
 from agent_app.schemas.analytics import AnalyticsQueryInput
 from agent_app.schemas.backend import BackendIdentity, CurrentUserData
 from agent_app.skills import SkillExecutionContext, SkillRegistry
@@ -121,6 +122,7 @@ class ProcurementGraphService:
         )
         self.knowledge_retriever = knowledge_retriever
         self.model_roles = model_roles
+        self.review_policy = ReviewPolicyV1()
         self.skill_registry = skill_registry or SkillRegistry()
         if skill_registry is None:
             self.skill_registry.register(ProcurementRecommendationSkill())
@@ -189,6 +191,7 @@ class ProcurementGraphService:
             "risk_investigation": None,
             "knowledge": None,
             "review": None,
+            "review_policy": None,
             "evidence_sufficient": False,
             "pending_action": (
                 restored_pending_action.model_dump(mode="json") if restored_pending_action else None
@@ -249,6 +252,11 @@ class ProcurementGraphService:
                 else None
             ),
             review=(ReviewOutput.model_validate(final["review"]) if final.get("review") else None),
+            review_policy=(
+                ReviewPolicyResult.model_validate(final["review_policy"])
+                if final.get("review_policy")
+                else None
+            ),
             evidence_sufficient=final.get("evidence_sufficient", False),
             pending_action=(
                 PendingAction.model_validate(final["pending_action"])
@@ -537,6 +545,7 @@ class ProcurementGraphService:
             if state.get("form_classification")
             else None
         )
+        deterministic_extracted = self._extract_form_fields(state["message"])
         model_error: StructuredModelRunError | None = None
         model_used = self.model_roles is not None
         if self.model_roles is not None:
@@ -546,21 +555,29 @@ class ProcurementGraphService:
                 )
             except StructuredModelRunError as exc:
                 model_error = exc
-                extracted = self._extract_form_fields(state["message"])
+                extracted = deterministic_extracted
         else:
-            extracted = self._extract_form_fields(state["message"])
+            extracted = deterministic_extracted
 
         quantity_result = parse_quantity_with_unit(state["message"])
 
-        extracted_fields = extracted.model_dump(
+        excluded_classification_fields = {
+            "classification_status",
+            "candidate_professions",
+            "device_profession",
+        }
+        deterministic_fields = deterministic_extracted.model_dump(
             mode="json",
-            exclude={
-                "classification_status",
-                "candidate_professions",
-                "device_profession",
-            },
+            exclude=excluded_classification_fields,
             exclude_none=True,
         )
+        extracted_fields = extracted.model_dump(
+            mode="json",
+            exclude=excluded_classification_fields,
+            exclude_none=True,
+        )
+        for field, value in deterministic_fields.items():
+            draft.setdefault(field, value)
         draft.update(extracted_fields)
         if quantity_result.status is QuantityParseStatus.VALID:
             draft["quantity"] = quantity_result.quantity
@@ -568,15 +585,23 @@ class ProcurementGraphService:
         elif quantity_result.status is QuantityParseStatus.INVALID:
             draft.pop("quantity", None)
         classification = extracted.classification()
+        classification_profession = extracted.device_profession
+        if deterministic_extracted.classification_status in {
+            DeviceClassificationStatus.CONFIDENT,
+            DeviceClassificationStatus.AMBIGUOUS,
+        }:
+            classification = deterministic_extracted.classification()
+            classification_profession = deterministic_extracted.device_profession
         if (
-            extracted.classification_status is DeviceClassificationStatus.UNKNOWN
+            classification.classification_status is DeviceClassificationStatus.UNKNOWN
+            and deterministic_extracted.device_name is None
             and extracted.device_name is None
             and previous_classification is not None
         ):
             classification = previous_classification
-        if extracted.classification_status is DeviceClassificationStatus.CONFIDENT:
-            assert extracted.device_profession is not None
-            draft["device_profession"] = extracted.device_profession
+        if classification.classification_status is DeviceClassificationStatus.CONFIDENT:
+            if classification_profession is not None:
+                draft["device_profession"] = classification_profession
         elif classification.classification_status is not DeviceClassificationStatus.CONFIDENT:
             draft.pop("device_profession", None)
         current_user = state["current_user"]
@@ -606,6 +631,11 @@ class ProcurementGraphService:
             if self.model_roles is not None and model_error is None
             else self._model_error_metadata(model_error)
         )
+        fallback_handled = model_error is not None and (
+            deterministic_extracted.classification_status
+            is not DeviceClassificationStatus.UNKNOWN
+            or bool(deterministic_fields)
+        )
         extract_trace = TraceEvent(
             event_type=TraceEventType.GRAPH,
             name="form_extract",
@@ -618,6 +648,7 @@ class ProcurementGraphService:
                 "model": model_metadata.get("actual_model"),
                 "classification_status": classification.classification_status.value,
                 "candidate_professions": classification.candidate_professions,
+                "fallback_handled": fallback_handled,
                 **model_metadata,
             },
             error_code=model_error.code if model_error else None,
@@ -645,7 +676,7 @@ class ProcurementGraphService:
                 trace.model_dump(mode="json"),
             ],
         }
-        if model_error:
+        if model_error and not fallback_handled:
             error = GraphError(
                 code=model_error.code,
                 message=f"模型表单抽取失败，已使用保守目录规则：{model_error.message}",
@@ -858,6 +889,7 @@ class ProcurementGraphService:
             requires_human_confirmation=state.get("pending_action") is not None,
         )
         review = deterministic_review
+        review_for_policy: ReviewOutput | None = review
         model_error: StructuredModelRunError | None = None
         route = RouteType(state["route"])
         review_needs_model = route in {
@@ -877,9 +909,11 @@ class ProcurementGraphService:
                     ComposeOutput.model_validate(state["compose_output"]),
                     state["evidence"],
                 )
+                review_for_policy = review
             except StructuredModelRunError as exc:
                 model_error = exc
                 review = deterministic_review
+                review_for_policy = None
         if state.get("pending_action") and not review.requires_human_confirmation:
             confirmation_issue = ReviewIssue(
                 code=ReviewIssueCode.HUMAN_CONFIRMATION_REQUIRED,
@@ -893,19 +927,32 @@ class ProcurementGraphService:
                     "requires_human_confirmation": True,
                 }
             )
+            if review_for_policy is not None:
+                review_for_policy = review
+        compose_output = ComposeOutput.model_validate(state["compose_output"])
+        write_operation = state.get("pending_action") is not None
+        policy = self.review_policy.evaluate(
+            draft=compose_output,
+            evidence=state["evidence"],
+            review=review_for_policy,
+            evidence_sufficient=state.get("evidence_sufficient", False),
+            write_operation=write_operation,
+        )
         model_metadata = (
             self.model_roles.trace_metadata(ModelPurpose.REVIEW)
             if model_review_used and self.model_roles is not None and model_error is None
             else self._model_error_metadata(model_error)
-        )
+        ) or {}
         trace = TraceEvent(
             event_type=TraceEventType.GRAPH,
             name="review",
-            status="FALLBACK" if model_error else "SUCCESS" if review.passed else "BLOCKED",
+            status=policy.decision.value,
             duration_ms=self._elapsed_ms(started),
             result={
                 "passed": review.passed,
                 "issue_codes": [item.code.value for item in review.issues],
+                "policy_decision": policy.decision.value,
+                "policy_issue_codes": [item.code for item in policy.issues],
                 "model_used": model_review_used and model_error is None,
                 **model_metadata,
             },
@@ -917,26 +964,29 @@ class ProcurementGraphService:
         updates: dict[str, Any] = {
             "step_count": step_count,
             "review": review.model_dump(mode="json"),
+            "review_policy": policy.model_dump(mode="json"),
             "trace_events": [*state["trace_events"], trace.model_dump(mode="json")],
         }
-        non_confirmation_blockers = [
-            item
-            for item in review.issues
-            if item.severity is ReviewSeverity.BLOCKING
-            and item.code is not ReviewIssueCode.HUMAN_CONFIRMATION_REQUIRED
-        ]
-        if non_confirmation_blockers and model_review_used and model_error is None:
-            updates["reply"] = review.revised_answer or (
+        if (
+            policy.decision is ReviewPolicyDecision.BLOCK
+            and model_review_used
+            and model_error is None
+        ):
+            trusted_revision = self.review_policy.trusted_revised_answer(
+                review.revised_answer,
+                state["evidence"],
+            )
+            updates["reply"] = trusted_revision or (
                 "当前结论未通过证据与权限审查，暂不向你提供可能误导的分析结果。"
                 "请补充问题范围或稍后重试。"
             )
             trace.result["review_output_enforced"] = True
-            trace.result["revised_answer_used"] = review.revised_answer is not None
+            trace.result["revised_answer_used"] = trusted_revision is not None
             updates["trace_events"][-1] = trace.model_dump(mode="json")
-        if model_error:
+        if model_error and write_operation:
             error = GraphError(
-                code=model_error.code,
-                message=f"模型 Review 失败，已使用确定性证据审查：{model_error.message}",
+                code="REVIEW_UNAVAILABLE",
+                message=f"Review 不可用，正式业务动作保持等待人工确认：{model_error.message}",
                 source="model_review",
             )
             updates["errors"] = [*state["errors"], error.model_dump(mode="json")]

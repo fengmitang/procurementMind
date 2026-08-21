@@ -768,7 +768,7 @@ async def test_complex_query_calls_model_planner_and_records_plan_trace() -> Non
     assert planner_trace.result["model_used"] is True
     assert planner_trace.result["actual_model"] == "planner-model"
     assert planner_trace.result["plan"]["steps"][0]["tool"] == "query_purchase_analytics"
-    assert result.reply == "已按后端可见数据完成统计，并明确限定统计范围。"
+    assert result.reply == "已根据实时工具结果完成统计。"
     review_trace = next(item for item in result.trace_events if item.name == "review")
-    assert review_trace.result["review_output_enforced"] is True
-    assert review_trace.result["revised_answer_used"] is True
+    assert review_trace.result["policy_decision"] == "WARN"
+    assert "review_output_enforced" not in review_trace.result

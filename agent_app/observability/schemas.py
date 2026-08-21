@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from agent_app.graph.schemas import GraphError, ToolExecution, TraceEvent
+from agent_app.review_policy import ReviewPolicyResult
 
 
 class ModelUsageSummary(BaseModel):
@@ -50,4 +51,5 @@ class ExecutionDetails(BaseModel):
     tools: list[ToolExecution]
     plan: dict[str, JsonValue] | None = None
     review: dict[str, JsonValue] | None = None
+    review_policy: ReviewPolicyResult | None = None
     errors: list[GraphError]

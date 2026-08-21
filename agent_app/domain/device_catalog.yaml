@@ -15,6 +15,7 @@ professions:
     ambiguous_terms:
       - "高压柜"
       - "开关柜"
+      - "配电柜"
       - "环网柜"
     notes: >
       “高压柜”“开关柜”未包含电压等级时存在歧义；

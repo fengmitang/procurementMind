@@ -30,29 +30,160 @@ def request() -> StructuredModelRequest:
     )
 
 
-def response(output: dict) -> StructuredModelResponse:
+def response(output: dict, *, model: str = "fake-1") -> StructuredModelResponse:
     return StructuredModelResponse(
         provider="fake",
-        model="fake-1",
+        model=model,
         output=output,
         latency_ms=1,
     )
 
 
 @pytest.mark.asyncio
-async def test_runner_retries_invalid_structure_then_validates() -> None:
+async def test_runner_does_not_retry_invalid_structure_on_primary() -> None:
     adapter = ScriptedModelAdapter([response({"wrong": 1}), response({"value": 2})])
 
+    with pytest.raises(StructuredModelRunError) as exc_info:
+        await StructuredModelRunner(
+            adapter,
+            timeout_seconds=1,
+            max_retries=1,
+        ).run(request(), ExpectedOutput)
+
+    assert exc_info.value.code == "MODEL_STRUCTURED_OUTPUT_INVALID"
+    assert exc_info.value.attempts == 1
+    assert len(adapter.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_runner_does_not_call_fallback_when_primary_schema_is_valid() -> None:
+    primary = ScriptedModelAdapter([response({"value": 1}, model="primary-model")])
+    fallback = ScriptedModelAdapter([response({"value": 2}, model="fallback-model")])
+
     output, metadata, attempts = await StructuredModelRunner(
-        adapter,
+        primary,
+        fallback_adapter=fallback,
+        primary_model="primary-model",
         timeout_seconds=1,
-        max_retries=1,
+        max_retries=2,
+    ).run(request(), ExpectedOutput)
+
+    assert output.value == 1
+    assert metadata.fallback_used is False
+    assert metadata.actual_model == "primary-model"
+    assert attempts == 1
+    assert len(primary.requests) == 1
+    assert fallback.requests == []
+
+
+@pytest.mark.asyncio
+async def test_runner_uses_fallback_for_invalid_primary_json() -> None:
+    primary = ScriptedModelAdapter(
+        [
+            ModelAdapterError(
+                "MODEL_STRUCTURED_OUTPUT_INVALID_JSON",
+                "模型结构化正文不是有效 JSON",
+                retryable=False,
+            )
+        ]
+    )
+    fallback = ScriptedModelAdapter([response({"value": 2}, model="fallback-model")])
+
+    output, metadata, attempts = await StructuredModelRunner(
+        primary,
+        fallback_adapter=fallback,
+        primary_model="primary-model",
+        timeout_seconds=1,
+        max_retries=3,
     ).run(request(), ExpectedOutput)
 
     assert output.value == 2
-    assert metadata.provider == "fake"
-    assert attempts == 2
-    assert len(adapter.requests) == 2
+    assert metadata.fallback_used is True
+    assert metadata.primary_model == "primary-model"
+    assert metadata.actual_model == "fallback-model"
+    assert "MODEL_STRUCTURED_OUTPUT_INVALID_JSON" in str(metadata.fallback_reason)
+    assert attempts == 1
+    assert len(primary.requests) == 1
+    assert len(fallback.requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("primary_content_type", ["array", "string"])
+async def test_runner_uses_fallback_for_non_object_primary_json(
+    primary_content_type: str,
+) -> None:
+    primary = ScriptedModelAdapter(
+        [
+            ModelAdapterError(
+                "MODEL_STRUCTURED_OUTPUT_INVALID",
+                f"模型结构化结果不是对象：{primary_content_type}",
+                retryable=False,
+            )
+        ]
+    )
+    fallback = ScriptedModelAdapter([response({"value": 3}, model="fallback-model")])
+
+    output, metadata, _ = await StructuredModelRunner(
+        primary,
+        fallback_adapter=fallback,
+        primary_model="primary-model",
+        timeout_seconds=1,
+        max_retries=3,
+    ).run(request(), ExpectedOutput)
+
+    assert output.value == 3
+    assert metadata.fallback_used is True
+    assert metadata.actual_model == "fallback-model"
+    assert len(primary.requests) == 1
+    assert len(fallback.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_runner_uses_fallback_for_primary_pydantic_validation_failure() -> None:
+    primary = ScriptedModelAdapter([response({"wrong": 1}, model="primary-model")])
+    fallback = ScriptedModelAdapter([response({"value": 4}, model="fallback-model")])
+
+    output, metadata, attempts = await StructuredModelRunner(
+        primary,
+        fallback_adapter=fallback,
+        primary_model="primary-model",
+        timeout_seconds=1,
+        max_retries=3,
+    ).run(request(), ExpectedOutput)
+
+    assert output.value == 4
+    assert metadata.fallback_used is True
+    assert metadata.primary_model == "primary-model"
+    assert metadata.actual_model == "fallback-model"
+    assert "MODEL_STRUCTURED_OUTPUT_INVALID" in str(metadata.fallback_reason)
+    assert attempts == 1
+    assert len(primary.requests) == 1
+    assert len(fallback.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_runner_fails_when_primary_and_fallback_fail_schema_validation() -> None:
+    primary = ScriptedModelAdapter([response({"wrong": 1}, model="primary-model")])
+    fallback = ScriptedModelAdapter([response({"also_wrong": 2}, model="fallback-model")])
+
+    with pytest.raises(StructuredModelRunError) as exc_info:
+        await StructuredModelRunner(
+            primary,
+            fallback_adapter=fallback,
+            primary_model="primary-model",
+            timeout_seconds=1,
+            max_retries=3,
+        ).run(request(), ExpectedOutput)
+
+    error = exc_info.value
+    assert error.code == "MODEL_STRUCTURED_OUTPUT_INVALID"
+    assert error.fallback_used is True
+    assert error.primary_model == "primary-model"
+    assert error.actual_model == "fallback-model"
+    assert "MODEL_STRUCTURED_OUTPUT_INVALID" in str(error.fallback_reason)
+    assert error.attempts == 1
+    assert len(primary.requests) == 1
+    assert len(fallback.requests) == 1
 
 
 @pytest.mark.asyncio
@@ -70,6 +201,60 @@ async def test_runner_does_not_retry_non_retryable_adapter_error() -> None:
 
     assert exc_info.value.code == "MODEL_AUTH_FAILED"
     assert exc_info.value.attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_runner_uses_fallback_once_for_primary_auth_failure() -> None:
+    primary = ScriptedModelAdapter(
+        [ModelAdapterError("MODEL_AUTH_FAILED", "认证失败", retryable=False)]
+    )
+    fallback = ScriptedModelAdapter([response({"value": 5}, model="fallback-model")])
+
+    output, metadata, attempts = await StructuredModelRunner(
+        primary,
+        fallback_adapter=fallback,
+        primary_model="primary-model",
+        timeout_seconds=1,
+        max_retries=3,
+    ).run(request(), ExpectedOutput)
+
+    assert output.value == 5
+    assert metadata.primary_model == "primary-model"
+    assert metadata.actual_model == "fallback-model"
+    assert metadata.fallback_used is True
+    assert metadata.fallback_reason == "MODEL_AUTH_FAILED: 认证失败"
+    assert attempts == 1
+    assert len(primary.requests) == 1
+    assert len(fallback.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_runner_surfaces_fallback_auth_failure_without_retrying_primary() -> None:
+    primary = ScriptedModelAdapter(
+        [ModelAdapterError("MODEL_AUTH_FAILED", "Primary 认证失败", retryable=False)]
+    )
+    fallback = ScriptedModelAdapter(
+        [ModelAdapterError("MODEL_AUTH_FAILED", "Fallback 认证失败", retryable=False)]
+    )
+
+    with pytest.raises(StructuredModelRunError) as exc_info:
+        await StructuredModelRunner(
+            primary,
+            fallback_adapter=fallback,
+            primary_model="primary-model",
+            timeout_seconds=1,
+            max_retries=3,
+        ).run(request(), ExpectedOutput)
+
+    error = exc_info.value
+    assert error.code == "MODEL_AUTH_FAILED"
+    assert error.message == "Fallback 模型失败：Fallback 认证失败"
+    assert error.retryable is False
+    assert error.fallback_used is True
+    assert error.fallback_reason == "MODEL_AUTH_FAILED: Primary 认证失败"
+    assert error.attempts == 1
+    assert len(primary.requests) == 1
+    assert len(fallback.requests) == 1
 
 
 @pytest.mark.asyncio

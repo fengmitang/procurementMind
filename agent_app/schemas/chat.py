@@ -9,6 +9,7 @@ from agent_app.investigation.schemas import RiskInvestigationOutput
 from agent_app.models.role_schemas import FormClassificationData, ReviewOutput
 from agent_app.observability.schemas import ExecutionDetails
 from agent_app.rag.schemas import RetrievalResult
+from agent_app.review_policy import ReviewPolicyResult
 from agent_app.skills.procurement_recommendation.schemas import RecommendationOutput
 
 
@@ -59,6 +60,7 @@ class ChatData(BaseModel):
     form_missing_fields: list[str] = Field(default_factory=list)
     form_classification: FormClassificationData | None = None
     review: ReviewOutput | None = None
+    review_policy: ReviewPolicyResult | None = None
     evidence_sufficient: bool = False
     pending_action: PendingAction | None = None
     recommendation: RecommendationOutput | None = None

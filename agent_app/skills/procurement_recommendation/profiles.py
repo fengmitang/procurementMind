@@ -54,7 +54,7 @@ PROFILES = {
         RecommendationProfileId.PURCHASER,
         "PURCHASER",
         RecommendationType.PURCHASER_CONTRACT,
-        (("supplier_id",), ("supplier_name",)),
+        (("supplier_id",), ("supplier_name",), ()),
         ("tax_rate", "contract_contact_info"),
         "purchased_at",
         ("tax_rate", "contract_contact_info"),

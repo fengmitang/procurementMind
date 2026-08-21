@@ -270,6 +270,54 @@ async def test_purchaser_and_warehouse_profiles_aggregate_declared_keys() -> Non
 
 
 @pytest.mark.asyncio
+async def test_contract_recommendation_without_supplier_uses_contract_evidence_tool() -> None:
+    client = FakeRecommendationClient(
+        {
+            "search_supplier_contract_evidence": {
+                "items": [
+                    {
+                        "reference_id": 303,
+                        "supplier_id": 7,
+                        "supplier_name": "历史供应商",
+                        "tax_rate": "13.00",
+                        "contract_contact_info": "合同联络渠道",
+                        "purchased_at": "2026-05-10T10:00:00",
+                    }
+                ],
+                "ambiguous_suppliers": [],
+            }
+        }
+    )
+
+    result = await ProcurementRecommendationSkill().execute(
+        context(
+            "比较服务器采购可参考的历史合同信息",
+            user("APPLICANT", "PURCHASER"),
+            client,
+        )
+    )
+
+    assert client.calls == [("search_supplier_contract_evidence", {"limit": 20})]
+    assert result.output.profile is RecommendationProfileId.PURCHASER
+    assert result.output.recommendation_type is RecommendationType.PURCHASER_CONTRACT
+    assert result.output.clarification_required is False
+    assert len(result.output.evidence) == 1
+    assert len(result.output.candidates) == 1
+
+
+def test_resolver_treats_general_contract_request_as_contract_recommendation() -> None:
+    resolution = RecommendationProfileResolver().resolve(
+        "核实历史合同条款作为采购参考",
+        user("APPLICANT", "PURCHASER"),
+        request_status=None,
+    )
+
+    assert resolution.explicit_type is RecommendationType.PURCHASER_CONTRACT
+    assert resolution.profile is not None
+    assert resolution.profile.profile_id is RecommendationProfileId.PURCHASER
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_supplier_name_requires_clarification() -> None:
     client = FakeRecommendationClient(
         {

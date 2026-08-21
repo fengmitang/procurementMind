@@ -261,6 +261,13 @@ def test_ambiguous_terms_never_set_device_profession(message: str) -> None:
     assert extracted.candidate_professions
 
 
+def test_generic_distribution_cabinet_keeps_both_voltage_candidates() -> None:
+    extracted = ProcurementGraphService._extract_form_fields("采购一个配电柜")
+
+    assert extracted.classification_status is DeviceClassificationStatus.AMBIGUOUS
+    assert extracted.candidate_professions == ["10kV开关柜", "400V配电柜"]
+
+
 def test_form_extract_schema_rejects_profession_outside_canonical_values() -> None:
     with pytest.raises(ValidationError):
         FormExtractOutput(
@@ -320,7 +327,7 @@ async def test_form_extract_model_ambiguity_is_persisted_and_confirmation_resolv
         first.form_classification.classification_status
         is DeviceClassificationStatus.AMBIGUOUS
     )
-    assert first.form_classification.candidate_professions == ["UPS", "传输"]
+    assert first.form_classification.candidate_professions == ["UPS"]
     assert first.pending_action is None
     assert "请确认" in first.reply
     assert first_state.collected_data["form_classification"]["classification_status"] == (
@@ -354,6 +361,105 @@ async def test_form_extract_model_ambiguity_is_persisted_and_confirmation_resolv
         ModelPurpose.FORM_EXTRACT,
         ModelPurpose.FORM_EXTRACT,
     ]
+
+
+@pytest.mark.asyncio
+async def test_catalog_ambiguity_overrides_model_confident_classification() -> None:
+    adapter = ScriptedModelAdapter(
+        [
+            model_response(
+                {
+                    "classification_status": "CONFIDENT",
+                    "candidate_professions": [],
+                    "device_profession": "UPS",
+                    "device_name": "功率模块",
+                    "quantity": 3,
+                    "unit": "个",
+                }
+            )
+        ]
+    )
+    roles = StructuredModelRoles(
+        StructuredModelRunner(adapter, timeout_seconds=1, max_retries=0),
+        "trace-form-catalog-ambiguity",
+    )
+
+    result = await ProcurementGraphService(settings(), model_roles=roles).run(
+        applicant_request("我要采购3个功率模块")
+    )
+
+    assert result.form_classification is not None
+    assert (
+        result.form_classification.classification_status
+        is DeviceClassificationStatus.AMBIGUOUS
+    )
+    assert "device_profession" not in result.form_draft
+
+
+@pytest.mark.asyncio
+async def test_invalid_model_ambiguity_is_handled_by_catalog_fallback() -> None:
+    adapter = ScriptedModelAdapter(
+        [
+            model_response(
+                {
+                    "classification_status": "AMBIGUOUS",
+                    "candidate_professions": [],
+                    "device_name": "精密空调",
+                    "quantity": 2,
+                    "unit": "台",
+                }
+            )
+        ]
+    )
+    roles = StructuredModelRoles(
+        StructuredModelRunner(adapter, timeout_seconds=1, max_retries=0),
+        "trace-form-invalid-ambiguity",
+    )
+
+    result = await ProcurementGraphService(settings(), model_roles=roles).run(
+        applicant_request("我要采购2台精密空调，用于机房降温")
+    )
+
+    assert result.errors == []
+    assert result.form_classification is not None
+    assert (
+        result.form_classification.classification_status
+        is DeviceClassificationStatus.AMBIGUOUS
+    )
+    assert result.form_classification.candidate_professions == ["SHU", "列间空调"]
+    assert result.form_draft["application_reason"] == "机房降温"
+    trace = next(item for item in result.trace_events if item.name == "form_extract")
+    assert trace.status == "FALLBACK"
+    assert trace.error_code == "MODEL_STRUCTURED_OUTPUT_INVALID"
+    assert trace.result["fallback_handled"] is True
+
+
+@pytest.mark.asyncio
+async def test_deterministic_reason_supplements_model_omission() -> None:
+    adapter = ScriptedModelAdapter(
+        [
+            model_response(
+                {
+                    "classification_status": "CONFIDENT",
+                    "candidate_professions": [],
+                    "device_profession": "服务器",
+                    "device_name": "机架服务器",
+                    "quantity": 3,
+                    "unit": "台",
+                }
+            )
+        ]
+    )
+    roles = StructuredModelRoles(
+        StructuredModelRunner(adapter, timeout_seconds=1, max_retries=0),
+        "trace-form-reason-supplement",
+    )
+
+    result = await ProcurementGraphService(settings(), model_roles=roles).run(
+        applicant_request("我要采购3台机架服务器，用于容量扩展")
+    )
+
+    assert result.form_draft["application_reason"] == "容量扩展"
 
 
 @pytest.mark.asyncio

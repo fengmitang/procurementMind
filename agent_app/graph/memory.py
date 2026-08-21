@@ -90,6 +90,8 @@ class GraphMemoryMapper:
             }
         if result.review is not None:
             collected_data["last_review"] = result.review.model_dump(mode="json")
+        if result.review_policy is not None:
+            collected_data["last_review_policy"] = result.review_policy.model_dump(mode="json")
         last_recommendations = list(previous.last_recommendations if previous else [])
         if result.recommendation is not None:
             last_recommendations = [result.recommendation.compact_state()]

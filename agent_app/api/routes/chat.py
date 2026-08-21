@@ -176,6 +176,7 @@ def _build_chat_data(
         form_missing_fields=result.form_missing_fields,
         form_classification=result.form_classification,
         review=result.review,
+        review_policy=result.review_policy,
         evidence_sufficient=result.evidence_sufficient,
         pending_action=result.pending_action,
         recommendation=result.recommendation,
@@ -203,6 +204,7 @@ def _knowledge_sources(result: GraphRunResult) -> list[KnowledgeSourceData]:
 
 
 def _business_results(result: GraphRunResult) -> list[BusinessResultData]:
+    purchase_request_results = _purchase_request_business_results(result)
     rows = []
     total: int | None = None
     if result.analysis is not None and result.analysis.table is not None:
@@ -225,7 +227,7 @@ def _business_results(result: GraphRunResult) -> list[BusinessResultData]:
             total_value = search.data.get("total")
             total = int(total_value) if isinstance(total_value, int) else None
     if not rows:
-        return []
+        return purchase_request_results
     if all(isinstance(item, dict) and item.get("requirement_no") for item in rows):
         allowed = {
             "requirement_id",
@@ -248,7 +250,8 @@ def _business_results(result: GraphRunResult) -> list[BusinessResultData]:
                 title="采购申请",
                 items=items,
                 total=total,
-            )
+            ),
+            *purchase_request_results,
         ]
     if all(isinstance(item, dict) and item.get("supplier_name") for item in rows):
         allowed = {
@@ -265,9 +268,83 @@ def _business_results(result: GraphRunResult) -> list[BusinessResultData]:
                 title="供应商",
                 items=items,
                 total=total,
-            )
+            ),
+            *purchase_request_results,
         ]
-    return []
+    return purchase_request_results
+
+
+def _purchase_request_business_results(
+    result: GraphRunResult,
+) -> list[BusinessResultData]:
+    items: list[dict] = []
+    identity_positions: dict[tuple[str, str], int] = {}
+    for execution in result.tool_results:
+        if (
+            execution.name != "get_purchase_request"
+            or not execution.success
+            or not isinstance(execution.data, dict)
+        ):
+            continue
+        item = _public_purchase_request_item(execution.data)
+        if not item:
+            continue
+        identity = _purchase_request_identity(item)
+        if identity is None:
+            items.append(item)
+            continue
+        existing_position = identity_positions.get(identity)
+        if existing_position is not None:
+            items[existing_position].update(item)
+            continue
+        identity_positions[identity] = len(items)
+        items.append(item)
+    return [
+        BusinessResultData(
+            kind="PURCHASE_REQUIREMENTS",
+            title="采购申请",
+            items=[item],
+            total=1,
+        )
+        for item in items
+    ]
+
+
+def _purchase_request_identity(item: dict) -> tuple[str, str] | None:
+    requirement_id = item.get("requirement_id")
+    if requirement_id is not None:
+        return ("requirement_id", str(requirement_id))
+    requirement_no = item.get("requirement_no")
+    if requirement_no not in (None, ""):
+        return ("requirement_no", str(requirement_no))
+    return None
+
+
+def _public_purchase_request_item(data: dict) -> dict:
+    item: dict = {}
+    for key in ("requirement_id", "requirement_no", "status"):
+        if key in data:
+            item[key] = data[key]
+
+    applicant_fields = data.get("applicant_fields")
+    if isinstance(applicant_fields, dict):
+        for key in ("device_name", "brand", "model", "quantity", "unit"):
+            if key in applicant_fields:
+                item[key] = applicant_fields[key]
+
+    if "current_handler" in data:
+        current_handler = data["current_handler"]
+        if isinstance(current_handler, dict):
+            if "name" in current_handler:
+                item["current_handler_name"] = current_handler["name"]
+        elif current_handler is None or isinstance(current_handler, str):
+            item["current_handler_name"] = current_handler
+
+    warehouse_receipt = data.get("warehouse_receipt")
+    if isinstance(warehouse_receipt, dict) and "received_quantity" in warehouse_receipt:
+        item["received_quantity"] = warehouse_receipt["received_quantity"]
+
+    return item
 
 
 def _persisted_message_data(result: GraphRunResult) -> dict:

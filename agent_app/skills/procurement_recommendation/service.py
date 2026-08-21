@@ -203,10 +203,11 @@ class ProcurementRecommendationSkill:
     def _missing_query_message(
         profile: RecommendationProfile, query: RecommendationQueryContext
     ) -> str | None:
-        if profile.profile_id is RecommendationProfileId.PURCHASER:
-            if query.supplier_id is None and not query.supplier_name:
-                return "请提供需要参考的供应商名称，或在采购单上下文中发起推荐。"
-        elif not query.device_profession and not query.resolved_device_names:
+        if (
+            profile.profile_id is not RecommendationProfileId.PURCHASER
+            and not query.device_profession
+            and not query.resolved_device_names
+        ):
             return "请提供需要参考的设备类型或设备名称。"
         return None
 
@@ -220,9 +221,21 @@ class ProcurementRecommendationSkill:
         ambiguity: str | None = None
         tool_name = profile.allowed_tools[0]
         for stage_number, stage_fields in enumerate(profile.retrieval_stages, start=1):
+            if (
+                not stage_fields
+                and profile.profile_id is RecommendationProfileId.PURCHASER
+                and (query.supplier_id is not None or query.supplier_name)
+            ):
+                continue
             arguments = self._stage_arguments(profile, stage_fields, query, time_range)
             signature = repr(sorted(arguments.items()))
-            if signature in seen_arguments or not self._stage_has_subject(arguments):
+            unscoped_contract_search = (
+                profile.profile_id is RecommendationProfileId.PURCHASER
+                and not stage_fields
+            )
+            if signature in seen_arguments or (
+                not unscoped_contract_search and not self._stage_has_subject(arguments)
+            ):
                 continue
             seen_arguments.add(signature)
             stages_used.append(stage_number)

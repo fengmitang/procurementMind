@@ -18,6 +18,14 @@ from agent_app.resilience import AsyncCircuitBreaker, CircuitOpenError
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
 logger = logging.getLogger(__name__)
+_STRUCTURED_OUTPUT_ERROR_CODES = {
+    "MODEL_STRUCTURED_OUTPUT_INVALID_JSON",
+    "MODEL_STRUCTURED_OUTPUT_INVALID",
+}
+_DIRECT_FALLBACK_ERROR_CODES = {
+    *_STRUCTURED_OUTPUT_ERROR_CODES,
+    "MODEL_AUTH_FAILED",
+}
 
 
 class StructuredModelRunError(RuntimeError):
@@ -122,6 +130,58 @@ class StructuredModelRunner:
                         )
                     return await adapter.complete_structured(request)
 
+            async def invoke_fallback(
+                fallback_reason: str, current_attempt: int
+            ) -> StructuredModelResponse:
+                assert self.fallback_adapter is not None
+                try:
+                    fallback_response = await invoke_adapter(self.fallback_adapter)
+                except TimeoutError:
+                    raise self._error(
+                        "MODEL_FALLBACK_TIMEOUT",
+                        "Fallback 模型调用超时",
+                        current_attempt,
+                        retryable=True,
+                        fallback_used=True,
+                        fallback_reason=fallback_reason,
+                    ) from None
+                except ModelAdapterError as exc:
+                    raise self._error(
+                        exc.code,
+                        f"Fallback 模型失败：{exc.message}",
+                        current_attempt,
+                        retryable=exc.retryable,
+                        fallback_used=True,
+                        fallback_reason=fallback_reason,
+                    ) from None
+                except Exception:
+                    raise self._error(
+                        "MODEL_FALLBACK_UNEXPECTED_FAILURE",
+                        "Fallback 模型发生未预期故障",
+                        current_attempt,
+                        retryable=False,
+                        fallback_used=True,
+                        fallback_reason=fallback_reason,
+                    ) from None
+                response = fallback_response.model_copy(
+                    update={
+                        "primary_model": self.primary_model,
+                        "actual_model": fallback_response.model,
+                        "fallback_used": True,
+                        "fallback_reason": fallback_reason,
+                    }
+                )
+                logger.warning(
+                    "Primary model failed; fallback model used",
+                    extra={
+                        "primary_model": self.primary_model,
+                        "actual_model": fallback_response.model,
+                        "fallback_used": True,
+                        "fallback_reason": fallback_reason,
+                    },
+                )
+                return response
+
             response: StructuredModelResponse | None = None
             primary_error: StructuredModelRunError | None = None
             try:
@@ -157,59 +217,19 @@ class StructuredModelRunner:
 
             if primary_error is not None:
                 last_error = primary_error
+                direct_fallback_error = primary_error.code in _DIRECT_FALLBACK_ERROR_CODES
                 if (
-                    primary_error.retryable
+                    (primary_error.retryable or direct_fallback_error)
                     and self.fallback_adapter is not None
                     and not emitted_delta
                 ):
                     fallback_reason = f"{primary_error.code}: {primary_error.message}"
                     try:
-                        fallback_response = await invoke_adapter(self.fallback_adapter)
-                    except TimeoutError:
-                        last_error = self._error(
-                            "MODEL_FALLBACK_TIMEOUT",
-                            "Fallback 模型调用超时",
-                            attempt,
-                            retryable=True,
-                            fallback_used=True,
-                            fallback_reason=fallback_reason,
-                        )
-                    except ModelAdapterError as exc:
-                        last_error = self._error(
-                            exc.code,
-                            f"Fallback 模型失败：{exc.message}",
-                            attempt,
-                            retryable=exc.retryable,
-                            fallback_used=True,
-                            fallback_reason=fallback_reason,
-                        )
-                    except Exception:
-                        last_error = self._error(
-                            "MODEL_FALLBACK_UNEXPECTED_FAILURE",
-                            "Fallback 模型发生未预期故障",
-                            attempt,
-                            retryable=False,
-                            fallback_used=True,
-                            fallback_reason=fallback_reason,
-                        )
-                    else:
-                        response = fallback_response.model_copy(
-                            update={
-                                "primary_model": self.primary_model,
-                                "actual_model": fallback_response.model,
-                                "fallback_used": True,
-                                "fallback_reason": fallback_reason,
-                            }
-                        )
-                        logger.warning(
-                            "Primary model unavailable; fallback model used",
-                            extra={
-                                "primary_model": self.primary_model,
-                                "actual_model": fallback_response.model,
-                                "fallback_used": True,
-                                "fallback_reason": fallback_reason,
-                            },
-                        )
+                        response = await invoke_fallback(fallback_reason, attempt)
+                    except StructuredModelRunError as exc:
+                        last_error = exc
+                        if direct_fallback_error:
+                            raise last_error from None
                 if response is None:
                     assert last_error is not None
                     if (
@@ -221,29 +241,36 @@ class StructuredModelRunner:
                     continue
 
             assert response is not None
-            validation_started = time.perf_counter()
-            try:
-                parsed = output_type.model_validate(response.output)
-            except ValidationError as exc:
-                validation_details = "; ".join(
-                    (
-                        f"{'.'.join(str(part) for part in item['loc'])}: "
-                        f"{item['type']} ({str(item.get('msg', ''))[:200]})"
+            while True:
+                validation_started = time.perf_counter()
+                try:
+                    parsed = output_type.model_validate(response.output)
+                except ValidationError as exc:
+                    validation_details = "; ".join(
+                        (
+                            f"{'.'.join(str(part) for part in item['loc'])}: "
+                            f"{item['type']} ({str(item.get('msg', ''))[:200]})"
+                        )
+                        for item in exc.errors(include_input=False)[:8]
                     )
-                    for item in exc.errors(include_input=False)[:8]
-                )
-                last_error = self._error(
-                    "MODEL_STRUCTURED_OUTPUT_INVALID",
-                    f"模型结构化输出不符合 Schema：{validation_details}",
-                    attempt,
-                    retryable=True,
-                    actual_model=response.model,
-                    fallback_used=response.fallback_used,
-                    fallback_reason=response.fallback_reason,
-                )
-                if emitted_delta:
-                    raise last_error from None
-            else:
+                    last_error = self._error(
+                        "MODEL_STRUCTURED_OUTPUT_INVALID",
+                        f"模型结构化输出不符合 Schema：{validation_details}",
+                        attempt,
+                        retryable=False,
+                        actual_model=response.actual_model or response.model,
+                        fallback_used=response.fallback_used,
+                        fallback_reason=response.fallback_reason,
+                    )
+                    if emitted_delta or response.fallback_used or self.fallback_adapter is None:
+                        raise last_error from None
+                    fallback_reason = f"{last_error.code}: {last_error.message}"
+                    try:
+                        response = await invoke_fallback(fallback_reason, attempt)
+                    except StructuredModelRunError as exc:
+                        raise exc from None
+                    continue
+
                 schema_validation_ms = max(
                     0, round((time.perf_counter() - validation_started) * 1000)
                 )
@@ -258,12 +285,6 @@ class StructuredModelRunner:
                 if self.usage_ledger is not None:
                     self.usage_ledger.record(request.purpose, response, attempt)
                 return parsed, response, attempt
-            if last_error and (
-                last_error.code == "MODEL_CIRCUIT_OPEN"
-                or not last_error.retryable
-                or attempt >= attempts
-            ):
-                raise last_error
         if last_error:
             raise last_error
         raise self._error(

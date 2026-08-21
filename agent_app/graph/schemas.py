@@ -10,6 +10,7 @@ from agent_app.analysis.schemas import AnalysisOutput
 from agent_app.investigation.schemas import RiskInvestigationOutput
 from agent_app.models.role_schemas import FormClassificationData, ReviewOutput
 from agent_app.rag.schemas import RetrievalResult
+from agent_app.review_policy import ReviewPolicyResult
 from agent_app.schemas.backend import (
     BackendIdentity,
     ConversationStateData,
@@ -126,6 +127,7 @@ class GraphRunResult(BaseModel):
     risk_investigation: RiskInvestigationOutput | None = None
     knowledge: RetrievalResult | None = None
     review: ReviewOutput | None = None
+    review_policy: ReviewPolicyResult | None = None
     evidence_sufficient: bool = False
     pending_action: "PendingAction | None" = None
     form_draft: dict[str, JsonValue] | None = None
@@ -185,6 +187,7 @@ class GraphState(TypedDict, total=False):
     risk_investigation: dict[str, JsonValue] | None
     knowledge: dict[str, JsonValue] | None
     review: dict[str, JsonValue] | None
+    review_policy: dict[str, JsonValue] | None
     evidence_sufficient: bool
     pending_action: dict[str, JsonValue] | None
     compose_output: dict[str, JsonValue] | None

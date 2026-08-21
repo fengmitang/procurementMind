@@ -65,7 +65,7 @@ class RecommendationProfileResolver:
     @staticmethod
     def explicit_type(message: str) -> RecommendationType | None:
         normalized = message.replace(" ", "")
-        if any(term in normalized for term in ("税率", "合同联系方式", "合同联系人")):
+        if "合同" in normalized or "税率" in normalized:
             return RecommendationType.PURCHASER_CONTRACT
         if any(term in normalized for term in ("仓库", "库位", "入库位置", "存放位置")):
             return RecommendationType.WAREHOUSE

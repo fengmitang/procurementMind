@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from agent_app.analysis.schemas import AnalysisPlan
 from agent_app.domain.device_catalog import build_device_classification_context
+from agent_app.models.evidence import model_evidence_contract, normalize_model_evidence
 from agent_app.models.protocols import (
     ModelMessage,
     ModelPurpose,
@@ -201,6 +202,8 @@ class StructuredModelRoles:
         *,
         allowed_citation_ids: set[str],
     ) -> ComposeOutput:
+        evidence_view = normalize_model_evidence(evidence)
+        effective_citation_ids = allowed_citation_ids | set(evidence_view.citation_ids)
         output, response, attempts = await self._run(
             ModelPurpose.COMPOSE,
             ComposeOutput,
@@ -213,17 +216,29 @@ class StructuredModelRoles:
                 "为空，citations 必须为空。Tool 实时事实直接陈述来源，不得伪造 K 编号。正式业务"
                 "动作只能说明需要人工确认。不得向用户展示 snake_case 字段名、数据库主键或"
                 "英文状态枚举；例如应将 PENDING_PURCHASE 表述为待采购、APPROVED 表述为已通过。"
+                "成功 Tool 明确返回的字段属于可直接陈述的 Tool 事实，不需要 K 引用，也不得伪造"
+                "Tool 引用。ANALYSIS_RESULT 是系统基于可见 Tool 数据和规则程序计算或归纳出的分析"
+                "证据，可直接支持其中明确给出的信号命中或未命中、风险等级、阈值、指标、数量、"
+                "比例、比较和忠实风险摘要；不需要 K 引用，也不得伪造 Analysis 引用。"
+                "必须忠实区分已匹配与未匹配、当前单据事实与历史统计，不得把未命中的信号写成"
+                "当前风险，也不得把相关性或预警信号写成违规、因果或制度结论。Analysis Evidence"
+                "不能替代制度依据；只有把制度、流程、职责或强制动作写成事实性要求时才使用相应"
+                "K 引用。一般性建议必须明确为非强制建议。"
                 "使用普通业务中文，优先按结论、当前情况、下一步操作、注意事项组织；关键动作"
                 "加粗，多步骤用编号，避免长段落和机械日志语气。"
             ),
             {
                 "question": question,
-                "visible_evidence": evidence,
-                "allowed_citation_ids": sorted(allowed_citation_ids),
+                "visible_evidence": evidence_view.visible_evidence,
+                "tool_evidence": evidence_view.tool_evidence,
+                "knowledge_evidence": evidence_view.knowledge_evidence,
+                "analysis_evidence": evidence_view.analysis_evidence,
+                "evidence_contract": model_evidence_contract(),
+                "allowed_citation_ids": sorted(effective_citation_ids),
             },
         )
         referenced = {item.citation_id for item in output.citations}
-        invalid = referenced - allowed_citation_ids
+        invalid = referenced - effective_citation_ids
         if invalid:
             raise StructuredModelRunError(
                 "MODEL_CITATION_REFERENCE_INVALID",
@@ -247,6 +262,8 @@ class StructuredModelRoles:
         allowed_citation_ids: set[str],
         answer_delta_handler: Callable[[str], Awaitable[None]],
     ) -> ComposeOutput:
+        evidence_view = normalize_model_evidence(evidence)
+        effective_citation_ids = allowed_citation_ids | set(evidence_view.citation_ids)
         output, response, attempts = await self._run(
             ModelPurpose.COMPOSE,
             ComposeOutput,
@@ -258,18 +275,30 @@ class StructuredModelRoles:
                 "citations 只能使用 allowed_citation_ids 中的知识库引用；如果该列表"
                 "为空，citations 必须为空。Tool 实时事实直接陈述来源，不得伪造 K 编号。正式业务"
                 "动作只能说明需要人工确认。answer 字段必须是完整、面向业务用户的中文回答。"
+                "成功 Tool 明确返回的字段属于可直接陈述的 Tool 事实，不需要 K 引用，也不得伪造"
+                "Tool 引用。ANALYSIS_RESULT 是系统基于可见 Tool 数据和规则程序计算或归纳出的分析"
+                "证据，可直接支持其中明确给出的信号命中或未命中、风险等级、阈值、指标、数量、"
+                "比例、比较和忠实风险摘要；不需要 K 引用，也不得伪造 Analysis 引用。"
+                "必须忠实区分已匹配与未匹配、当前单据事实与历史统计，不得把未命中的信号写成"
+                "当前风险，也不得把相关性或预警信号写成违规、因果或制度结论。Analysis Evidence"
+                "不能替代制度依据；制度、流程、职责或强制动作主张必须使用相应 K 引用；一般性"
+                "建议必须明确为非强制建议。"
                 "不得向用户展示 snake_case 字段名、数据库主键或英文状态枚举；例如应将 "
                 "PENDING_PURCHASE 表述为待采购、APPROVED 表述为已通过。使用结论、当前情况、"
                 "下一步操作、注意事项的清晰结构；关键动作加粗，多步骤用编号，避免机械日志语气。"
             ),
             {
                 "question": question,
-                "visible_evidence": evidence,
-                "allowed_citation_ids": sorted(allowed_citation_ids),
+                "visible_evidence": evidence_view.visible_evidence,
+                "tool_evidence": evidence_view.tool_evidence,
+                "knowledge_evidence": evidence_view.knowledge_evidence,
+                "analysis_evidence": evidence_view.analysis_evidence,
+                "evidence_contract": model_evidence_contract(),
+                "allowed_citation_ids": sorted(effective_citation_ids),
             },
         )
         referenced = {item.citation_id for item in output.citations}
-        invalid = referenced - allowed_citation_ids
+        invalid = referenced - effective_citation_ids
         if invalid:
             raise StructuredModelRunError(
                 "MODEL_CITATION_REFERENCE_INVALID",
@@ -330,18 +359,47 @@ class StructuredModelRoles:
         draft: ComposeOutput,
         evidence: list[dict[str, Any]],
     ) -> ReviewOutput:
+        evidence_view = normalize_model_evidence(evidence)
         output, _, _ = await self._run(
             ModelPurpose.REVIEW,
             ReviewOutput,
             (
                 "你是采购协同 Review。只检查证据缺失、遗漏约束、分析冒充事实、越权、不可见引用、"
                 "RAG/Tool 冲突和人工确认需要；不得重新计算后端权限、金额、黑名单、幂等或"
-                "状态机规则。"
+                "状态机规则。严格区分三类证据：RAG_KNOWLEDGE 是制度、流程、职责等知识证据，"
+                "Draft 对这类知识的事实性主张必须在 citations 中使用对应的 K 编号；缺少有效 K "
+                "引用应报告 MISSING_EVIDENCE。MCP_TOOL_RESULT 是本次请求中已经成功且对当前用户"
+                "可见的实时 Tool 结果，可直接支持当前状态、处理人、设备、品牌型号、申请数量、"
+                "实收数量等业务事实；这些 Tool 事实不要求、也不允许伪造 K 编号或 Tool 引用，"
+                "不得仅因它们没有 K Citation 而报告 MISSING_EVIDENCE 或 ANALYSIS_AS_FACT。必须"
+                "把状态枚举忠实翻译成业务中文，以及依据 allowed_actions 中某动作存在或缺失说明"
+                "该动作当前可用或不可用，也视为 Tool 事实的直接表达，不是分析推断；但超出 Tool "
+                "数据解释具体制度原因时仍须有知识证据和 K 引用。实时状态与适用于该状态的通用"
+                "流程规则通常是互补证据，只有二者对同一事实给出不能同时成立的结论时才属于"
+                "RAG/Tool 冲突。"
+                "ANALYSIS_RESULT 是系统基于可见 Tool 数据和规则程序计算或归纳出的分析证据。凡"
+                "Draft 的风险结论可以逐字段核对 analysis_evidence 中明确返回的 matched、"
+                "risk_level、threshold、metrics、count、ratio、数值比较或忠实摘要，都视为已有"
+                "Analysis 支撑；"
+                "不得仅因该结论未逐字出现在原始 Tool 或 K 知识中而报告 MISSING_EVIDENCE 或"
+                "ANALYSIS_AS_FACT，也不得要求虚构 Analysis Citation。若 Draft 与 Tool/Analysis 数据"
+                "冲突，使用不可见或失败结果，或扩展出 Analysis 未给出的因果、违规定性、制度流程"
+                "或强制动作，仍须阻断；其中制度性主张必须由 Knowledge Evidence 和 K 引用支持。"
+                "明确使用‘建议’‘可考虑’等非强制措辞的人工"
+                "核实建议，不等同于 allowed_actions 中可直接执行的后端动作，也不自动构成越权；"
+                "只有冒充制度强制要求或声称已经执行时才阻断。"
+                "把 Draft 中的实时事实与 tool_evidence 的 data 核对；明确冲突、使用不可见/失败"
+                "结果、越权，或真实 RAG/Tool 冲突仍须阻断。knowledge_evidence 中没有支持且没有"
+                "有效 K 引用的知识主张仍须阻断。"
             ),
             {
                 "question": question,
                 "draft": draft.model_dump(mode="json"),
-                "visible_evidence": evidence,
+                "visible_evidence": evidence_view.visible_evidence,
+                "evidence_contract": model_evidence_contract(),
+                "knowledge_evidence": evidence_view.knowledge_evidence,
+                "tool_evidence": evidence_view.tool_evidence,
+                "analysis_evidence": evidence_view.analysis_evidence,
             },
         )
         return output

@@ -4,6 +4,7 @@ from agent_app.observability.schemas import (
     ExecutionDetails,
     ModelUsageSummary,
 )
+from agent_app.review_policy import ReviewPolicyDecision
 
 
 def build_execution_details(
@@ -48,6 +49,7 @@ def build_execution_details(
         tools=result.tool_results,
         plan=plan,
         review=review,
+        review_policy=result.review_policy,
         errors=result.errors,
     )
 
@@ -70,7 +72,16 @@ def _execution_status(
         return "FAILED"
     if (
         result.errors
-        or result.route is RouteType.HYBRID
+        or not result.reply.strip()
+        or (
+            result.review_policy is not None
+            and result.review_policy.decision is ReviewPolicyDecision.BLOCK
+        )
+        or (
+            result.review_policy is not None
+            and result.review_policy.decision is ReviewPolicyDecision.REVIEW_UNAVAILABLE
+            and result.pending_action is not None
+        )
         or (result.analysis and result.analysis.partial_success)
         or (result.risk_investigation and not result.risk_investigation.complete)
     ):
@@ -96,9 +107,17 @@ def _components(
         )
     review_status = "SKIPPED"
     review_detail = "本次路由不需要 Review"
-    if result.review:
-        review_status = "SUCCESS" if result.review.passed else "FAILED"
-        review_detail = f"证据审查 {len(result.review.issues)} 项问题"
+    if result.review_policy:
+        review_status = {
+            ReviewPolicyDecision.PASS: "SUCCESS",
+            ReviewPolicyDecision.WARN: "PARTIAL",
+            ReviewPolicyDecision.BLOCK: "FAILED",
+            ReviewPolicyDecision.REVIEW_UNAVAILABLE: "PARTIAL",
+        }[result.review_policy.decision]
+        review_detail = (
+            f"Review Policy {result.review_policy.decision.value}，"
+            f"裁决 {len(result.review_policy.issues)} 项问题"
+        )
     elif result.risk_investigation:
         review_status = "SUCCESS" if result.risk_investigation.review.passed else "FAILED"
         review_detail = f"程序审查 {result.risk_investigation.review.checked_items} 项风险"
